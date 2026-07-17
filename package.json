@@ -1,0 +1,20 @@
+{
+  "name": "ai-harness-setup",
+  "version": "0.0.1",
+  "description": "A CLI tool to setup basic AI harness tools.",
+  "homepage": "https://github.com/hancrafted/ai-harness-setup#readme",
+  "bugs": {
+    "url": "https://github.com/hancrafted/ai-harness-setup/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hancrafted/ai-harness-setup.git"
+  },
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
