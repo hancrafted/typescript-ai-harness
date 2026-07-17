@@ -2,6 +2,10 @@
 
 This project provides an interactive CLI Tool to setup basic harness libraries to any projects to reduce the boilerplate code for AI projects.
 
+## Rules
+
+1. Do not auto-include yourself in the commit message.
+
 ## Commits
 
 1. **Commits** Make atomic commits using Conventional Commits v1.1.0 format `[feat, fix, docs, refactor, chore](scope): <short summary in present tense>`
@@ -38,3 +42,12 @@ Default triage label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`
 ### Domain docs
 
 Single-context layout — one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### ADR governance
+
+Two ADR systems coexist, deliberately:
+
+- `docs/adr/` — design ADRs from `/domain-modeling` (prose; the *why* behind decisions), created lazily during grilling/design sessions.
+- `.archgate/adrs/` — archgate governance ADRs (`*.md` + executable `*.rules.ts`); the deterministic enforcement layer read by `archgate check`.
+
+**For now they are separate entities.** End state: archgate ADRs are the single source of truth for ADRs — they both steer the LLM and enforce deterministic governance via `rules.ts`. Design ADRs in `docs/adr/` are converted into archgate ADRs later; until conversion, `docs/adr/` holds the canonical design record. Do not conflate the two homes.
