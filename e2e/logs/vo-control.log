@@ -1,0 +1,13 @@
+
+> vitest-only@0.0.0 verify
+> tsc --noEmit && vitest run
+
+
+ RUN  v4.1.10 /private/tmp/harness-e2e/vitest-only
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:07:57
+   Duration  120ms (transform 9ms, setup 0ms, import 14ms, tests 1ms, environment 0ms)
+

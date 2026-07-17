@@ -1,0 +1,33 @@
+
+> full@0.0.0 verify:commit
+> lint-staged && tsc --noEmit && vitest run
+
+⚠ Skipping backup because there’s no initial commit yet. This might result in data loss.
+
+[STARTED] Preparing lint-staged...
+[COMPLETED] Preparing lint-staged...
+[STARTED] Running tasks for staged files...
+[STARTED] .lintstagedrc.json — 13 files
+[STARTED] *.ts — 3 files
+[STARTED] *.{js,mjs,cjs,json,md,yml,yaml} — 6 files
+[STARTED] eslint --fix
+[STARTED] prettier --write
+[COMPLETED] prettier --write
+[COMPLETED] *.{js,mjs,cjs,json,md,yml,yaml} — 6 files
+[COMPLETED] eslint --fix
+[STARTED] prettier --write
+[COMPLETED] prettier --write
+[COMPLETED] *.ts — 3 files
+[COMPLETED] .lintstagedrc.json — 13 files
+[COMPLETED] Running tasks for staged files...
+[STARTED] Staging changes from tasks...
+[COMPLETED] Staging changes from tasks...
+
+ RUN  v4.1.10 /private/tmp/harness-e2e/full
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:07:41
+   Duration  125ms (transform 9ms, setup 0ms, import 15ms, tests 2ms, environment 0ms)
+

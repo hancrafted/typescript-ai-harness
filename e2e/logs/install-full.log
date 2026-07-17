@@ -1,0 +1,10 @@
+[install] cwd=/tmp/harness-e2e/full
+[install] answers={"integrations":["eslint","prettier","vitest","husky"],"eslint":{"rules":["complexity","max-lines-per-function","max-params","max-depth","max-lines"]},"prettier":{"importSort":"organize-imports"},"vitest":{},"husky":{"hooks":["pre-commit","pre-push"]}}
+
+added 177 packages, and audited 178 packages in 8s
+
+72 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+[install] applied 19 actions
