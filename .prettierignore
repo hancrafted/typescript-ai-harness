@@ -1,0 +1,13 @@
+# Build artifacts (this block is what the tool's generic template emits).
+node_modules
+coverage
+dist
+
+# Repo-specific additions: vendored skills, prose docs, and agent config
+# predate this harness and are not the tool's own source. The deferred
+# adaptation skill (ADR-0003) will generalize per-target ignores later.
+.agents
+.claude
+docs
+*.md
+skills-lock.json

@@ -1,7 +1,7 @@
 {
   "name": "ai-harness-setup",
   "version": "0.0.1",
-  "description": "A CLI tool to setup basic AI harness tools.",
+  "description": "Interactive CLI to install and update a standard dev-tooling harness (archgate, eslint, prettier, vitest, husky) in any Node/TypeScript project.",
   "homepage": "https://github.com/hancrafted/ai-harness-setup#readme",
   "bugs": {
     "url": "https://github.com/hancrafted/ai-harness-setup/issues"
@@ -11,10 +11,39 @@
     "url": "git+https://github.com/hancrafted/ai-harness-setup.git"
   },
   "license": "MIT",
-  "author": "",
-  "type": "commonjs",
-  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "ai-harness-setup": "bin/ai-harness-setup.mjs"
+  },
+  "files": [
+    "bin",
+    "src"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "eslint . && prettier --check . && tsc --noEmit && vitest run",
+    "verify:commit": "lint-staged && tsc --noEmit && vitest run",
+    "prepare": "husky || true"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "tsx": "^4.23.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
+    "prettier": "^3.9.5",
+    "prettier-plugin-organize-imports": "^4.3.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.64.0",
+    "vitest": "^4.1.10"
   }
 }
