@@ -1,6 +1,0 @@
-
-> eslint-prettier@0.0.0 verify
-> eslint . && prettier --check . && tsc --noEmit
-
-Checking formatting...
-All matched files use Prettier code style!

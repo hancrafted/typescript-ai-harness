@@ -1,4 +1,0 @@
-
-> eslint-only@0.0.0 verify
-> eslint . && tsc --noEmit
-

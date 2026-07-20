@@ -1,5 +1,0 @@
-{
-  "integrations": ["vitest", "husky"],
-  "vitest": {},
-  "husky": { "hooks": ["pre-commit", "pre-push"] }
-}

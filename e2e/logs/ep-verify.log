@@ -1,7 +1,0 @@
-
-> eslint-prettier@0.0.0 verify
-> eslint . && prettier --check . && tsc --noEmit
-
-Checking formatting...
-[warn] src/prettier-fail.ts
-[warn] Code style issues found in the above file. Run Prettier with --write to fix.
