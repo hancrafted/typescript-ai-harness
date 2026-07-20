@@ -26,11 +26,12 @@ const TSCONFIG = `{
 /**
  * Compose the full Action[] for a selection: baseline actions first, then each
  * selected Integration's plan in registry order (which fixes run-command
- * ordering — archgate init before husky). Pure: no IO, safe to render/preview.
+ * ordering — interactive `archgate init` before husky). Pure: no IO, safe to
+ * render/preview.
  */
-export function buildPlan(answers: Answers, cwd: string): Action[] {
+export function buildPlan(answers: Answers, cwd: string, yes = false): Action[] {
   const selected = answers.integrations;
-  const ctx: Ctx = { cwd, selected };
+  const ctx: Ctx = { cwd, selected, yes };
   const actions: Action[] = [
     // TypeScript is baseline: `verify` runs `tsc --noEmit` and a target may have
     // no tsconfig. Not a selectable Integration (ADR-0002).
