@@ -1,4 +1,4 @@
-# ai-harness-setup
+# typescript-ai-harness
 
 An interactive CLI that installs and updates a standard dev-tooling **harness** in
 any Node/TypeScript project — so you stop re-deriving the same boilerplate by hand.
@@ -33,7 +33,7 @@ through [tsx](https://www.npmjs.com/package/tsx) at invocation time.
 From the root of the project you want to set up:
 
 ```bash
-npx github:hancrafted/ai-harness-setup
+npx github:hancrafted/typescript-ai-harness
 ```
 
 If the directory has no `package.json`, the tool creates a minimal one for you first —
@@ -72,7 +72,7 @@ you say yes.
 ### Preview without changing anything
 
 ```bash
-npx github:hancrafted/ai-harness-setup --dry-run
+npx github:hancrafted/typescript-ai-harness --dry-run
 ```
 
 `--dry-run` runs the prompts and prints the full plan, then exits **without touching the
@@ -81,7 +81,7 @@ project**. Ideal for previewing an update.
 ### Non-interactive mode
 
 ```bash
-npx github:hancrafted/ai-harness-setup --yes
+npx github:hancrafted/typescript-ai-harness --yes
 ```
 
 `--yes` skips every prompt — the integrations multiselect and each integration's
@@ -147,7 +147,7 @@ repo (so a staged change can never commit a red tree).
 ## Notes & current limitations
 
 - **Distribution.** During active development the tool runs from a GitHub spec
-  (`npx github:hancrafted/ai-harness-setup`); there's no build step and no npm publish yet.
+  (`npx github:hancrafted/typescript-ai-harness`); there's no build step and no npm publish yet.
 - **npm only.** pnpm / yarn / bun detection is not implemented.
 - **No ADRs are copied** by the archgate integration in this version — you start from a clean
   governance baseline. `archgate init` may require you to be in a git repository.
@@ -171,7 +171,7 @@ npm run format     # prettier --write .
 ### Layout
 
 ```
-bin/ai-harness-setup.mjs      # launcher: registers tsx, imports src/cli.ts
+bin/typescript-ai-harness.mjs      # launcher: registers tsx, imports src/cli.ts
 src/
   cli.ts                      # interactive @clack/prompts layer -> answers
   run.ts                      # run(answers, {cwd, exec}) — the core seam

@@ -1,27 +1,27 @@
 {
-  "name": "ai-harness-setup",
+  "name": "typescript-ai-harness",
   "version": "0.0.1",
   "description": "Interactive CLI to install and update a standard dev-tooling harness (archgate, eslint, prettier, vitest, husky) in any Node/TypeScript project.",
-  "homepage": "https://github.com/hancrafted/ai-harness-setup#readme",
+  "homepage": "https://github.com/hancrafted/typescript-ai-harness#readme",
   "bugs": {
-    "url": "https://github.com/hancrafted/ai-harness-setup/issues"
+    "url": "https://github.com/hancrafted/typescript-ai-harness/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hancrafted/ai-harness-setup.git"
+    "url": "git+https://github.com/hancrafted/typescript-ai-harness.git"
   },
   "license": "MIT",
   "type": "module",
   "bin": {
-    "ai-harness-setup": "bin/ai-harness-setup.mjs"
+    "typescript-ai-harness": "bin/typescript-ai-harness.mjs"
   },
   "files": [
     "bin",
     "src"
   ],
   "scripts": {
-    "run": "npx tsx bin/ai-harness-setup.mjs",
-    "run:dry": "npx tsx bin/ai-harness-setup.mjs --dry-run",
+    "run": "npx tsx bin/typescript-ai-harness.mjs",
+    "run:dry": "npx tsx bin/typescript-ai-harness.mjs --dry-run",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "format": "prettier --write .",

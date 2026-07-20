@@ -62,7 +62,7 @@ export async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
   const yes = process.argv.includes('--yes');
   const cwd = process.cwd();
-  intro('ai-harness-setup');
+  intro('typescript-ai-harness');
   const answers = await gatherAnswers(yes);
   if (dryRun) previewOnly(answers, cwd);
   else await confirmAndApply(answers, cwd, yes);
