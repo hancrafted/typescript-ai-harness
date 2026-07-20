@@ -12,6 +12,7 @@ harness — it updates in place without clobbering your project metadata.
 - **Pick what you want** — a multiselect of five integrations, each with its own sub-options.
 - **Safe to re-run** — tool-owned configs are refreshed; your `package.json` is surgically merged, never overwritten.
 - **Preview first** — `--dry-run` prints the full plan and touches nothing.
+- **Scriptable** — `--yes` skips every prompt and applies the full harness with defaults.
 
 ---
 
@@ -77,6 +78,19 @@ npx github:hancrafted/ai-harness-setup --dry-run
 `--dry-run` runs the prompts and prints the full plan, then exits **without touching the
 project**. Ideal for previewing an update.
 
+### Non-interactive mode
+
+```bash
+npx github:hancrafted/ai-harness-setup --yes
+```
+
+`--yes` skips every prompt — the integrations multiselect and each integration's
+sub-options — and applies the full harness with defaults: all five integrations,
+archgate editor `claude`, all five eslint clean-code rules, prettier's
+`organize-imports`, husky's `pre-commit` + `pre-push` hooks. It still prints the plan
+summary before applying, but never blocks for input. Combine with `--dry-run` to
+preview the default plan non-interactively without applying it.
+
 ### Re-running = update
 
 Running the tool again performs an **update from this repo as the single source of truth**:
@@ -138,7 +152,7 @@ repo (so a staged change can never commit a red tree).
 - **No ADRs are copied** by the archgate integration in this version — you start from a clean
   governance baseline. `archgate init` may require you to be in a git repository.
 - Deferred: an adaptation skill that fits the generic templates to a project's actual layout,
-  full Keep-a-Changelog commit-body validation, and a non-interactive `--yes` flag.
+  and full Keep-a-Changelog commit-body validation.
 
 ---
 
