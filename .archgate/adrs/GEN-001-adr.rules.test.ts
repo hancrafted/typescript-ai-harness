@@ -191,3 +191,140 @@ describe('adr-claude-rules-symlink', () => {
     expect(violations.some((v) => /has no backing ADR/.test(v.message))).toBe(true);
   });
 });
+
+// ---- Shape-grammar (§5) and companion rules-file (§6) rules ----
+
+const TEST_PATH = '.archgate/adrs/GEN-001-adr.rules.test.ts';
+
+// A companion rules file whose single rule key is what the marker tests reference.
+const DEMO_RULES = "export default { rules: { 'demo-rule': { async check() {} } } };";
+
+// Build an ADR from a custom Decision and Do's/Don'ts body; the other sections are trivial.
+function adrWith(decision: string, dosDonts: string): string {
+  return `${FM}
+
+# T
+
+## Context
+
+Why.
+
+## Decision
+
+${decision}
+
+## Do's and Don'ts
+
+${dosDonts}
+
+## Consequences
+
+So.
+
+## Compliance and Enforcement
+
+Enforced.
+
+## References
+
+Links.
+`;
+}
+
+describe('adr-numbered-decision', () => {
+  it('passes numbered anchors with sequential per-anchor lists', async () => {
+    const decision = '### 1. First\n\n1. Alpha.\n2. Beta.\n\n### 2. Second\n\nProse only.';
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith(decision, '1. **DO** x.') });
+    await rules['adr-numbered-decision'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails on an unordered first-level bullet inside an anchor', async () => {
+    const decision = '### 1. First\n\n- loose bullet';
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith(decision, '1. **DO** x.') });
+    await rules['adr-numbered-decision'].check(ctx);
+    expect(violations.some((v) => /unordered first-level bullet/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-numbered-dos-donts', () => {
+  it("passes DO and DON'T blocks each ordered from 1", async () => {
+    const dosDonts = "1. **DO** a.\n2. **DO** b.\n\n1. **DON'T** c.\n2. **DON'T** d.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
+    await rules['adr-numbered-dos-donts'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails on a non-sequential DO block', async () => {
+    const dosDonts = "1. **DO** a.\n3. **DO** b.\n\n1. **DON'T** c.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
+    await rules['adr-numbered-dos-donts'].check(ctx);
+    expect(violations.some((v) => /DO block numbering must be sequential/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-rule-mentions', () => {
+  const decision = '### 1. Thing (📜 Rule: `demo-rule`)\n\n1. Body.';
+
+  it('passes when a rule is marked on both sides with an aligned back-reference', async () => {
+    const dosDonts = "1. **DO** it. (Decision 1, 📜 Rule: `demo-rule`)\n\n1. **DON'T** not.";
+    const files = { [ADR_PATH]: adrWith(decision, dosDonts), [RULES_PATH]: DEMO_RULES };
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-rule-mentions'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it("fails when the Do's/Don'ts-side marker is missing", async () => {
+    const dosDonts = "1. **DO** it.\n\n1. **DON'T** not.";
+    const files = { [ADR_PATH]: adrWith(decision, dosDonts), [RULES_PATH]: DEMO_RULES };
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-rule-mentions'].check(ctx);
+    expect(violations.some((v) => /needs its marker \(Decision <N>/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-no-review-tag', () => {
+  it('passes an ADR with no review tag, and ignores one inside a code span', async () => {
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: VALID_ADR.replace('Why.', 'Why. `[review]` is exempt.') });
+    await rules['adr-no-review-tag'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails when a bare [review] tag appears in prose', async () => {
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: VALID_ADR.replace('Why.', 'Why. [review] this.') });
+    await rules['adr-no-review-tag'].check(ctx);
+    expect(violations.some((v) => /retired \[review\] tag/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-rules-test-sibling', () => {
+  it('passes when a rules file has its sibling test', async () => {
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: DEMO_RULES, [TEST_PATH]: '' });
+    await rules['adr-rules-test-sibling'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails when the sibling test is absent', async () => {
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: DEMO_RULES });
+    await rules['adr-rules-test-sibling'].check(ctx);
+    expect(violations.some((v) => /no sibling test/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-message-provenance', () => {
+  it('passes when every rule embeds its provenance tag', async () => {
+    const src =
+      "export default { rules: { 'demo-rule': { async check(ctx) { ctx.report.violation({ message: '(GEN-001 [demo-rule])' }); } } } };";
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: src });
+    await rules['adr-message-provenance'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails when a rule omits its provenance tag', async () => {
+    const src =
+      "export default { rules: { 'demo-rule': { async check(ctx) { ctx.report.violation({ message: 'no tag here' }); } } } };";
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: src });
+    await rules['adr-message-provenance'].check(ctx);
+    expect(violations.some((v) => /must embed the provenance literal/.test(v.message))).toBe(true);
+  });
+});

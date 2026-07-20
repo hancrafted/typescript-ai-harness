@@ -1,10 +1,10 @@
 /// <reference path="../rules.d.ts" />
 
 // GEN-001 — ADR Contract: the meta-rules governing ADR markdown files under
-// .archgate/adrs/ and their .claude/rules runtime-loading symlinks. All three
-// rules are errors (GEN-001 §5); there is no migration epoch. Ratcheting to a
-// fuller shape ceremony happens via ADR amendment only.
-
+// .archgate/adrs/, their companion .rules.ts files, and the .claude/rules
+// runtime-loading symlinks. All nine rules are errors (GEN-001 §7); there is no
+// migration epoch — an ADR conforms fully or the build fails. Further rules or a
+// tier change land only by deliberate ADR amendment.
 const ADR_MD_GLOB = '.archgate/adrs/*.md';
 const RULES_GLOB = '.archgate/adrs/*.rules.ts';
 const CLAUDE_RULES_GLOB = '.claude/rules/*.md';
@@ -66,6 +66,140 @@ async function tryReadFile(ctx: RuleContext, path: string): Promise<string | nul
   } catch {
     return null;
   }
+}
+
+function stripFences(content: string): string {
+  let inFence = false;
+  return content
+    .split(/\r?\n/)
+    .map((line) => {
+      if (/^(```|~~~)/.test(line.trim())) {
+        inFence = !inFence;
+        return '';
+      }
+      return inFence ? '' : line;
+    })
+    .join('\n');
+}
+
+function stripCodeSpans(text: string): string {
+  return text.replace(/`[^`\n]*`/g, '``');
+}
+
+// Section body from `## <name>` to the next `## ` heading (fences stripped).
+function getSection(content: string, heading: string): string | null {
+  const lines = stripFences(content).split('\n');
+  const esc = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const start = lines.findIndex((l) => new RegExp(`^${esc}[ \\t]*$`).test(l));
+  if (start === -1) return null;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^## /.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start + 1, end).join('\n');
+}
+
+// Decision-side marker: (📜 Rule: `<id>`) — anchored to the enclosing numbered
+// ### anchor (or top-level ordered item in a list-form Decision). Do's/Don'ts-side
+// marker: (Decision <N>, 📜 Rule: `<id>`) — N back-references the Decision anchor
+// that carries the rule's Decision-side marker.
+const DECISION_MARKER_RE = /\(📜 Rule: `([a-z0-9-]+)`\)/g;
+const DD_MARKER_RE = /\(Decision (\d+), 📜 Rule: `([a-z0-9-]+)`\)/g;
+
+// Map ruleId → anchor numbers where its Decision-side marker appears.
+function decisionMarkers(section: string): Map<string, number[]> {
+  const found = new Map<string, number[]>();
+  const lines = section.split('\n');
+  const hasAnchors = lines.some((l) => /^###\s/.test(l));
+  let current = 0;
+  for (const line of lines) {
+    const anchor = hasAnchors ? line.match(/^###\s+(\d+)\.\s/) : line.match(/^(\d+)\.\s/);
+    if (anchor) current = Number(anchor[1]);
+    for (const m of line.matchAll(DECISION_MARKER_RE)) {
+      const list = found.get(m[1]) ?? [];
+      list.push(current);
+      found.set(m[1], list);
+    }
+  }
+  return found;
+}
+
+// Map ruleId → back-referenced Decision numbers from Do's/Don'ts markers.
+function ddMarkers(section: string): Map<string, number[]> {
+  const found = new Map<string, number[]>();
+  for (const m of section.matchAll(DD_MARKER_RE)) {
+    const list = found.get(m[2]) ?? [];
+    list.push(Number(m[1]));
+    found.set(m[2], list);
+  }
+  return found;
+}
+
+// Rule keys declared in a companion .rules.ts source — the `'<id>': {` entries.
+function ruleKeysOf(rulesSource: string): string[] {
+  const keys: string[] = [];
+  const re = /["']([a-z0-9-]+)["'][ \t]*:[ \t]*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(rulesSource)) !== null) keys.push(m[1]);
+  return keys;
+}
+
+// Sequentiality helper: numbers must read 1, 2, 3, … with no gap or restart.
+function checkSequential(nums: number[]): boolean {
+  return nums.every((n, i) => n === i + 1);
+}
+
+interface DecisionFindings {
+  messages: string[];
+}
+
+function checkDecisionNumbering(section: string): DecisionFindings {
+  const lines = section.split('\n');
+  const anchors = lines.filter((l) => /^###\s/.test(l));
+  const messages: string[] = [];
+  if (anchors.length > 0) {
+    const nums: number[] = [];
+    for (const a of anchors) {
+      const m = a.match(/^###\s+(\d+)\.\s/);
+      if (!m) messages.push(`Decision anchor '${a.trim()}' is not numbered 'N.'`);
+      else nums.push(Number(m[1]));
+    }
+    if (!checkSequential(nums)) messages.push(`Decision anchors are not sequential from 1 (found ${nums.join(',')})`);
+    // First-level items inside anchors: unordered bullets flagged; ordered lists restart at 1 per anchor.
+    let seq: number[] = [];
+    let seenAnchor = false;
+    for (const line of lines) {
+      if (/^###\s/.test(line)) {
+        if (seq.length > 0 && !checkSequential(seq))
+          messages.push(`ordered items not sequential (found ${seq.join(',')})`);
+        seq = [];
+        seenAnchor = true;
+        continue;
+      }
+      if (!seenAnchor) continue;
+      if (/^[-*+]\s/.test(line))
+        messages.push(`unordered first-level bullet '${line.trim().slice(0, 40)}' inside a Decision anchor`);
+      const om = line.match(/^(\d+)\.\s/);
+      if (om) seq.push(Number(om[1]));
+    }
+    if (seq.length > 0 && !checkSequential(seq)) messages.push(`ordered items not sequential (found ${seq.join(',')})`);
+  } else {
+    const items = lines
+      .map((l) => l.match(/^(\d+)\.\s/))
+      .filter((m): m is RegExpMatchArray => m !== null)
+      .map((m) => Number(m[1]));
+    const loose = lines.filter((l) => /^[-*+]\s/.test(l));
+    if (items.length === 0)
+      messages.push("Decision has neither numbered '### N.' anchors nor a top-level ordered list");
+    else if (!checkSequential(items))
+      messages.push(`top-level ordered list not sequential from 1 (found ${items.join(',')})`);
+    if (loose.length > 0 && items.length > 0)
+      messages.push('unordered top-level bullets mixed into list-form Decision');
+  }
+  return { messages };
 }
 
 export default {
@@ -216,6 +350,161 @@ export default {
               message: `Runtime symlink '${entry}' has no backing ADR with a non-empty paths: — remove the orphan (GEN-001 [adr-claude-rules-symlink]).`,
               file: entry,
             });
+          }
+        }
+      },
+    },
+
+    'adr-rule-mentions': {
+      description:
+        "Each companion rule carries exactly one Decision-side marker (📜 Rule: `<id>`) in ## Decision and exactly one Do's/Don'ts-side marker (Decision <N>, 📜 Rule: `<id>`) whose N back-references the marked anchor.",
+      severity: 'error',
+      async check(ctx) {
+        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
+        for (const file of files) {
+          const sibling = file.replace(/\.md$/, '.rules.ts');
+          const source = await tryReadFile(ctx, sibling);
+          if (source === null) continue; // no rules file — nothing to mention
+          const content = await ctx.readFile(file);
+          const dMarks = decisionMarkers(getSection(content, '## Decision') ?? '');
+          const ddMarks = ddMarkers(getSection(content, "## Do's and Don'ts") ?? '');
+          for (const ruleId of ruleKeysOf(source)) {
+            const anchors = dMarks.get(ruleId) ?? [];
+            if (anchors.length !== 1) {
+              ctx.report.violation({
+                message: `Rule '${ruleId}' needs its Decision-side marker (📜 Rule: \`${ruleId}\`) exactly once in ## Decision, found ${anchors.length} (GEN-001 [adr-rule-mentions]).`,
+                file,
+              });
+            }
+            const refs = ddMarks.get(ruleId) ?? [];
+            if (refs.length !== 1) {
+              ctx.report.violation({
+                message: `Rule '${ruleId}' needs its marker (Decision <N>, 📜 Rule: \`${ruleId}\`) exactly once in ## Do's and Don'ts, found ${refs.length} (GEN-001 [adr-rule-mentions]).`,
+                file,
+              });
+            }
+            if (anchors.length === 1 && refs.length === 1 && refs[0] !== anchors[0]) {
+              ctx.report.violation({
+                message: `Rule '${ruleId}' Do's/Don'ts back-reference points at Decision ${refs[0]} but its Decision-side marker sits in anchor ${anchors[0]} (GEN-001 [adr-rule-mentions]).`,
+                file,
+              });
+            }
+          }
+        }
+      },
+    },
+
+    'adr-numbered-decision': {
+      description:
+        "Decision anchors are '### N.' sequential from 1 (or a top-level ordered list when there are no anchors); first-level items inside each anchor form a sequential ordered list, never unordered bullets.",
+      severity: 'error',
+      async check(ctx) {
+        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
+        for (const file of files) {
+          const decision = getSection(await ctx.readFile(file), '## Decision');
+          if (decision === null) continue; // adr-required-sections owns the missing-section finding
+          for (const msg of checkDecisionNumbering(decision).messages) {
+            ctx.report.violation({ message: `${msg} (GEN-001 [adr-numbered-decision]).`, file });
+          }
+        }
+      },
+    },
+
+    'adr-numbered-dos-donts': {
+      description:
+        "The DO and DON'T blocks are each a sequential ordered list restarting at 1, every item keeping its bold **DO** / **DON'T** prefix.",
+      severity: 'error',
+      async check(ctx) {
+        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
+        for (const file of files) {
+          const section = getSection(await ctx.readFile(file), "## Do's and Don'ts");
+          if (section === null) continue;
+          const doNums: number[] = [];
+          const dontNums: number[] = [];
+          let bad = false;
+          for (const line of section.split('\n')) {
+            if (/^[-*+]\s+\*\*(DO|DON'T)\*\*/.test(line)) {
+              ctx.report.violation({
+                message: `Do's and Don'ts item '${line.trim().slice(0, 50)}' is an unordered bullet — blocks must be ordered lists (GEN-001 [adr-numbered-dos-donts]).`,
+                file,
+              });
+              bad = true;
+              continue;
+            }
+            const m = line.match(/^(\d+)\.\s+\*\*(DO|DON'T)\*\*/);
+            if (m) (m[2] === 'DO' ? doNums : dontNums).push(Number(m[1]));
+          }
+          if (bad) continue;
+          if (!checkSequential(doNums)) {
+            ctx.report.violation({
+              message: `DO block numbering must be sequential from 1, found ${doNums.join(',')} (GEN-001 [adr-numbered-dos-donts]).`,
+              file,
+            });
+          }
+          if (!checkSequential(dontNums)) {
+            ctx.report.violation({
+              message: `DON'T block numbering must restart at 1 and be sequential, found ${dontNums.join(',')} (GEN-001 [adr-numbered-dos-donts]).`,
+              file,
+            });
+          }
+        }
+      },
+    },
+
+    'adr-no-review-tag': {
+      description:
+        'The retired [review] tag must not appear in an ADR outside code spans and fenced blocks — route the duty into Manual review duties instead.',
+      severity: 'error',
+      async check(ctx) {
+        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
+        for (const file of files) {
+          const content = stripCodeSpans(stripFences(await ctx.readFile(file)));
+          const count = (content.match(/\[review\]/g) ?? []).length;
+          if (count > 0) {
+            ctx.report.violation({
+              message: `ADR contains ${count} retired [review] tag(s) outside code spans — route the duty into Manual review duties instead (GEN-001 [adr-no-review-tag]).`,
+              file,
+            });
+          }
+        }
+      },
+    },
+
+    'adr-rules-test-sibling': {
+      description: 'Every .archgate/adrs/*.rules.ts has a sibling *.rules.test.ts.',
+      severity: 'error',
+      async check(ctx) {
+        const rulesFiles = await ctx.glob(RULES_GLOB);
+        const testFiles = await ctx.glob('.archgate/adrs/*.rules.test.ts');
+        for (const rf of rulesFiles) {
+          const sibling = rf.replace(/\.rules\.ts$/, '.rules.test.ts');
+          if (!testFiles.includes(sibling)) {
+            ctx.report.violation({
+              message: `Rules file has no sibling test '${basename(sibling)}' (GEN-001 [adr-rules-test-sibling]).`,
+              file: rf,
+            });
+          }
+        }
+      },
+    },
+
+    'adr-message-provenance': {
+      description:
+        'Every rule self-identifies in its output: for each rule key R in an <ID>-<slug>.rules.ts the source embeds the literal provenance tag (<ID> [R]).',
+      severity: 'error',
+      async check(ctx) {
+        const rulesFiles = await ctx.glob(RULES_GLOB);
+        for (const rf of rulesFiles) {
+          const idMatch = basename(rf).match(/^([A-Z]+-\d{3})-/);
+          if (!idMatch) continue;
+          const source = await ctx.readFile(rf);
+          for (const ruleId of ruleKeysOf(source)) {
+            if (!source.includes(`(${idMatch[1]} [${ruleId}])`)) {
+              ctx.report.violation({
+                message: `Rule '${ruleId}' messages must embed the provenance literal '(${idMatch[1]} [${ruleId}])' (GEN-001 [adr-message-provenance]).`,
+                file: rf,
+              });
+            }
           }
         }
       },
