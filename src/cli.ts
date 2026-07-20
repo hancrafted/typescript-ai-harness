@@ -37,7 +37,7 @@ async function gatherAnswers(yes: boolean): Promise<Answers> {
 }
 
 async function confirmAndApply(answers: Answers, cwd: string, yes: boolean): Promise<void> {
-  const actions = buildPlan(answers, cwd);
+  const actions = buildPlan(answers, cwd, yes);
   note(summarize(actions).join('\n'), 'Planned changes');
   if (!yes) {
     const ok = await confirm({ message: 'Apply this harness to the current project?' });
@@ -50,11 +50,16 @@ async function confirmAndApply(answers: Answers, cwd: string, yes: boolean): Pro
   progress.start('Applying harness');
   await apply(actions, { cwd, exec: realExec, log: (message) => progress.message(message) });
   progress.stop('Harness applied.');
+  if (yes && answers.integrations.includes('archgate')) {
+    // Headless: the direct-write path doesn't install the Claude plugin (US-13),
+    // so point the developer to it. Interactive `archgate init` installs it itself.
+    log.info('Run `archgate plugin install` to enable the archgate Claude plugin.');
+  }
   outro('Done. Review the changes and commit when ready.');
 }
 
-function previewOnly(answers: Answers, cwd: string): void {
-  note(summarize(buildPlan(answers, cwd)).join('\n'), 'Planned changes (dry run)');
+function previewOnly(answers: Answers, cwd: string, yes: boolean): void {
+  note(summarize(buildPlan(answers, cwd, yes)).join('\n'), 'Planned changes (dry run)');
   outro('Dry run — nothing was changed.');
 }
 
@@ -64,7 +69,7 @@ export async function main(): Promise<void> {
   const cwd = process.cwd();
   intro('typescript-ai-harness');
   const answers = await gatherAnswers(yes);
-  if (dryRun) previewOnly(answers, cwd);
+  if (dryRun) previewOnly(answers, cwd, yes);
   else await confirmAndApply(answers, cwd, yes);
 }
 

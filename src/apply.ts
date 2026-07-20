@@ -25,7 +25,8 @@ const ofKind = <K extends Action['kind']>(actions: Action[], kind: K): Extract<A
  * The single executor for every declarative Action (ADR-0004). Steps run in a
  * fixed canonical order regardless of emission order: merge package.json →
  * gitignore → install → write configs → run commands. Install precedes the
- * run-commands because their binaries (archgate, husky) must exist first.
+ * run-commands because their binaries (archgate for interactive `init`, husky)
+ * must exist first.
  * `dryRun` reports every intended change and touches nothing (ADR-0002).
  */
 export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {

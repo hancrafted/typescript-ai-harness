@@ -32,12 +32,12 @@ export type Action =
 export interface Ctx {
   cwd: string;
   selected: IntegrationId[];
+  /** The `--yes` flag: headless, non-interactive. Lets an Integration pick a headless-safe path (e.g. archgate direct-writes instead of shelling out to interactive `archgate init` — ADR-0005). */
+  yes: boolean;
 }
 
-export type ArchgateEditor = 'claude' | 'cursor' | 'vscode' | 'copilot' | 'opencode';
-export interface ArchgateChoice {
-  editor: ArchgateEditor;
-}
+/** archgate has no sub-options: the snapshot is fixed to editor `claude` (ADR-0005). */
+export type ArchgateChoice = Record<string, never>;
 
 export type EslintRuleId = 'complexity' | 'max-lines-per-function' | 'max-params' | 'max-depth' | 'max-lines';
 export interface EslintChoice {
