@@ -25,6 +25,7 @@ Alternatives considered: (1) A generator that copies each ADR body into `.claude
 1. This contract governs every ADR markdown and rules.ts file under `.archgate/adrs/` whose basename matches `<PREFIX>-<NNN>-<slug>.{md,ts}`.
 2. GEN-001 is self-hosting: its own file and companion `.rules.ts` satisfy every rule below, and its `paths:` spans the whole bundle (`.md`, `.rules.ts`, tests), so the contract loads whichever piece an agent opens.
 3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are explicitly out of scope — owned by `GEN-002-frontmatter` and a future index ADR respectively.
+4. `.archgate/adrs/` is flat and fully governed: every non-hidden file under it (recursively) MUST be a top-level `<PREFIX>-<NNN>-<slug>` `.md`, `.rules.ts`, or `.rules.test.ts`, and every rules/test file MUST have its backing `.md`. archgate discovers ADRs by frontmatter, not filename — a misnamed or nested file may still act as governance while this contract cannot see it, and an ADR-less `.rules.ts` is silently inert. (📜 Rule: `adr-governed-files`)
 
 ### 2. Frontmatter contract (📜 Rule: `adr-frontmatter`)
 
@@ -34,11 +35,11 @@ Alternatives considered: (1) A generator that copies each ADR body into `.claude
 4. `id` MUST match the filename prefix (`GEN-001-adr.md` carries `id: GEN-001`).
 5. `domain` MUST be a registered archgate domain (built-in or `.archgate/config.json` custom).
 6. `rules: true` MUST have a sibling `<basename>.rules.ts`, and an existing sibling `.rules.ts` MUST have `rules: true` — both directions.
-7. `paths`, when present, MUST be written inline (YAML flow form) — e.g. `paths: [".archgate/adrs/**/*.{md,ts}"]`. A block-style list parses as empty, and §4.3 then bans the symlink: runtime scope silently degrades to nothing. Unlinted — a manual review duty.
+7. `paths`, when present, MUST be written inline (YAML flow form) — e.g. `paths: [".archgate/adrs/**/*.{md,ts}"]`. A block-style, bare, or null value parses as empty, and §4.3 then bans the symlink: runtime scope silently degrades to nothing. (📜 Rule: `adr-paths-inline`)
 
 ### 3. Required sections (📜 Rule: `adr-required-sections`)
 
-Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): `## Context`, `## Decision`, `## Do's and Don'ts`, `## Consequences`, `## Compliance and Enforcement`, `## References`. Additional sections are permitted.
+Every ADR MUST carry all six canonical H2 headings (exact text, presence-only, fenced code blocks don't count): `## Context`, `## Decision`, `## Do's and Don'ts`, `## Consequences`, `## Compliance and Enforcement`, `## References`. Additional sections are permitted.
 
 ### 4. Claude Code rules symlink (📜 Rule: `adr-claude-rules-symlink`)
 
@@ -63,7 +64,7 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 
 ### 7. Enforcement tier
 
-1. All rules run at `error`.
+1. All rules run at `error`; a companion rules file MUST NOT declare a warning- or info-tier severity. (📜 Rule: `adr-error-tier`)
 
 ## Do's and Don'ts
 
@@ -77,13 +78,15 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 8. **DO** anchor every companion rule to prose on both sides — a Decision-side marker on the deciding anchor and a back-referencing Do's/Don'ts marker naming that anchor. (Decision 5, 📜 Rule: `adr-rule-mentions`)
 9. **DO** give every `.rules.ts` a sibling `.rules.test.ts` that exercises each rule's pass and fail path. (Decision 6, 📜 Rule: `adr-rules-test-sibling`)
 10. **DO** embed the provenance tag `(<ID> [<rule-key>])` in every rule's report messages. (Decision 6, 📜 Rule: `adr-message-provenance`)
+11. **DO** run every companion rule at the `error` tier — §7 permits no other. (Decision 7, 📜 Rule: `adr-error-tier`)
 
 1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-002's, INDEX routing is the index ADR's.
 2. **DON'T** leave a `.claude/rules` ADR entry behind when its backing ADR is deleted or drops its `paths:` — remove the symlink in the same change.
 3. **DON'T** flip the enforcement tier or add new rules outside an explicit ADR amendment.
-4. **DON'T** author `paths:` as a YAML block-style list — inline flow form only (§2.7).
+4. **DON'T** author `paths:` as a YAML block-style list — inline flow form only. (Decision 2, 📜 Rule: `adr-paths-inline`)
 5. **DON'T** attach a `.claude/rules` symlink to an ADR whose `paths:` is empty or absent — an ADR that governs nothing at runtime carries no runtime entry.
 6. **DON'T** let the retired `[review]` tag resurface in an ADR — write the obligation into the Manual review duties instead. (Decision 5, 📜 Rule: `adr-no-review-tag`)
+7. **DON'T** park stray files, subdirectories, or ADR-less rules files under `.archgate/adrs/` — what the contract cannot see it cannot govern, and an orphan `.rules.ts` never runs. (Decision 1, 📜 Rule: `adr-governed-files`)
 
 ## Consequences
 
@@ -93,14 +96,14 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 2. **Just-in-time governance:** the governing ADR loads into agent context the moment a governed file is opened — compliance happens before the archgate backstop rejects at push.
 3. **Scope self-documents:** `paths:` is both the runtime load trigger and the documented governance surface of each ADR. The contract's own lint scope is a separate, fixed set of globs in `GEN-001-adr.rules.ts` — no rule reads `paths:` to scope itself, so keeping the two aligned is a manual review duty.
 4. **Dogfooded:** GEN-001's own rules validate its own file and symlink on every `archgate check`.
-5. **Rule ↔ prose traceability:** every companion rule is marked on both the Decision and the Do's/Don'ts sides, so no rule enforces something the ADR never states and no stated rule goes unenforced — the correspondence is machine-checked, not trusted.
+5. **Rule ↔ prose traceability:** every companion rule is marked on both the Decision and the Do's/Don'ts sides, and every marker must name a rule the companion file declares — no rule enforces something the ADR never states, no stated rule goes unenforced, and the correspondence is machine-checked in both directions, not trusted.
 
 **Negative:**
 
 1. **Symlink upkeep:** one `.claude/rules` symlink per scoped ADR is extra surface to keep in sync — mitigated: `adr-claude-rules-symlink` fails on drift.
 2. **Behavioral dependency with an inverting failure mode:** the symlink-not-copy check rides on archgate's file reader rejecting symlinks — documented in the CLI skill reference, but not a semver-guaranteed contract, and the enforcing binary is a shared global cache (`~/.archgate/bin`), not a per-repo pin. If a future archgate release follows symlinks, the check does **not** degrade gracefully — it inverts: every valid symlink reads as a forbidden copy (an `error` on every scoped ADR, blocking all commits) while orphan detection goes silent at the same time. The rule's unit tests mock the non-following reader, so only a real `archgate check` run surfaces the flip. Recovery: pin or roll back the binary, or amend this rule; then pivot to the copy-body generator fallback (Context, alternative 1).
-3. **Silent block-form failure:** a block-style `paths:` parses as empty and drops runtime scope with no lint error (§2.7) — guarded by manual review only, not by a rule.
-4. **Authoring ceremony:** nine rules — numbered anchors, twin rule markers, a sibling rules-test, provenance tags — are more to satisfy per ADR than plain prose. Mitigated: the `adr-author` skill encodes the shape, this ADR auto-loads into context via its `.claude/rules` symlink whenever an ADR file is opened, and each rule's message names the exact fix.
+3. **Grammar rides on regex parsing:** the contract's own meta-rules parse YAML and TypeScript with regexes — quoted kebab-case rule keys and inline `paths:` are load-bearing conventions; hardening to AST parsing is tracked in [#7](https://github.com/hancrafted/typescript-ai-harness/issues/7).
+4. **Authoring ceremony:** twelve rules — numbered anchors, twin rule markers, a sibling rules-test, provenance tags — are more to satisfy per ADR than plain prose. Mitigated: the `adr-author` skill encodes the shape, this ADR auto-loads into context via its `.claude/rules` symlink whenever an ADR file is opened, and each rule's message names the exact fix.
 5. **Target correctness unverified:** the symlink rule proves *a symlink exists at the expected name*, not that it resolves to its own ADR — a link pointing at the wrong file, or left dangling by a target move, passes and silently loads wrong (or no) runtime context. The rule API cannot inspect link targets (no lstat/readlink); alignment is a manual review duty, and [#9](https://github.com/hancrafted/typescript-ai-harness/issues/9) tracks the upstream ask.
 
 **Risks:**
@@ -110,9 +113,9 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 
 ## Compliance and Enforcement
 
-Automated: `GEN-001-adr.rules.ts` enforces these nine rules, all at `error` (§7), scoped to ADR basenames under `.archgate/adrs/`; each is marked inline via `📜 Rule:` at its deciding anchor in §2–§6: `adr-frontmatter`, `adr-required-sections`, `adr-claude-rules-symlink`, `adr-numbered-decision`, `adr-numbered-dos-donts`, `adr-rule-mentions`, `adr-no-review-tag`, `adr-rules-test-sibling`, `adr-message-provenance`.
+Automated: `GEN-001-adr.rules.ts` enforces these twelve rules, all at `error` (§7), scoped to ADR basenames under `.archgate/adrs/`; each is marked inline via `📜 Rule:` at its deciding anchor in §1–§7: `adr-governed-files`, `adr-frontmatter`, `adr-paths-inline`, `adr-required-sections`, `adr-claude-rules-symlink`, `adr-numbered-decision`, `adr-numbered-dos-donts`, `adr-rule-mentions`, `adr-no-review-tag`, `adr-rules-test-sibling`, `adr-message-provenance`, `adr-error-tier`.
 
-**Manual review duties** (never linted): `paths:` is written inline (§2.7); `paths:` globs actually describe the ADR's real governance surface; each `.claude/rules` symlink resolves to its own ADR (§4.2 — link targets are not machine-checkable); the sibling `.rules.test.ts` exercises each rule's pass and fail path (§6.1); section bodies are substantive, not empty placeholders that pass the presence-only check.
+**Manual review duties** (never linted): `paths:` globs actually describe the ADR's real governance surface; each `.claude/rules` symlink resolves to its own ADR (§4.2 — link targets are not machine-checkable); the sibling `.rules.test.ts` exercises each rule's pass and fail path (§6.1); section bodies are substantive, not empty placeholders that pass the presence-only check.
 
 **Toolchain note:** `.archgate/**` is deliberately outside the repo's eslint and `tsc --noEmit` gates until a dedicated script ADR governs rules-file authoring ([#9](https://github.com/hancrafted/typescript-ai-harness/issues/9)); archgate forbids imports from shared folders (e.g. `.archgate/lib`), so every rules file is self-contained. Prettier and vitest do cover `.archgate/**/*.ts`; `archgate check` is the sole gate on the ADR markdown itself.
 

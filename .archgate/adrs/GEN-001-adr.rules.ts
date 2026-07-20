@@ -2,13 +2,16 @@
 
 // GEN-001 — ADR Contract: the meta-rules governing ADR markdown files under
 // .archgate/adrs/, their companion .rules.ts files, and the .claude/rules
-// runtime-loading symlinks. All nine rules are errors (GEN-001 §7); there is no
-// migration epoch — an ADR conforms fully or the build fails. Further rules or a
-// tier change land only by deliberate ADR amendment.
+// runtime-loading symlinks. All twelve rules are errors (GEN-001 §7); there is
+// no migration epoch — an ADR conforms fully or the build fails. Further rules
+// or a tier change land only by deliberate ADR amendment.
 const ADR_MD_GLOB = '.archgate/adrs/*.md';
 const RULES_GLOB = '.archgate/adrs/*.rules.ts';
+const ADRS_DIR = '.archgate/adrs/';
 const CLAUDE_RULES_GLOB = '.claude/rules/*.md';
 const ADR_BASENAME_RE = /^([A-Z]+-\d{3})-.+\.md$/;
+const RULES_BASENAME_RE = /^[A-Z]+-\d{3}-.+\.rules\.ts$/;
+const RULES_TEST_BASENAME_RE = /^[A-Z]+-\d{3}-.+\.rules\.test\.ts$/;
 // Lowercased ADR-shaped basename, as it appears under .claude/rules/.
 const CLAUDE_ADR_LINK_RE = /^[a-z]+-\d{3}-.+\.md$/;
 const BUILTIN_DOMAINS = ['architecture', 'backend', 'data', 'frontend', 'general'];
@@ -287,12 +290,12 @@ export default {
 
     'adr-required-sections': {
       description:
-        "Every ADR carries the six canonical H2 sections: Context, Decision, Do's and Don'ts, Consequences, Compliance and Enforcement, References (presence only).",
+        "Every ADR carries the six canonical H2 sections: Context, Decision, Do's and Don'ts, Consequences, Compliance and Enforcement, References (presence only, fenced code blocks don't count).",
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
         for (const file of files) {
-          const content = await ctx.readFile(file);
+          const content = stripFences(await ctx.readFile(file));
           for (const heading of REQUIRED_SECTIONS) {
             const esc = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             if (!new RegExp(`^${esc}[ \\t]*$`, 'm').test(content)) {
@@ -337,7 +340,7 @@ export default {
             }
           } else if (entries.has(link)) {
             ctx.report.violation({
-              message: `ADR has empty/absent paths: but a runtime entry exists at '${link}' — remove it (GEN-001 [adr-claude-rules-symlink]).`,
+              message: `ADR has empty/absent paths: but a runtime entry exists at '${link}' — remove it, or write paths: as an inline flow list if the ADR was meant to be scoped (§2.7) (GEN-001 [adr-claude-rules-symlink]).`,
               file,
             });
           }
@@ -357,18 +360,37 @@ export default {
 
     'adr-rule-mentions': {
       description:
-        "Each companion rule carries exactly one Decision-side marker (📜 Rule: `<id>`) in ## Decision and exactly one Do's/Don'ts-side marker (Decision <N>, 📜 Rule: `<id>`) whose N back-references the marked anchor.",
+        "Each companion rule carries exactly one Decision-side marker (📜 Rule: `<id>`) in ## Decision and exactly one Do's/Don'ts-side marker (Decision <N>, 📜 Rule: `<id>`) whose N back-references the marked anchor; conversely, every marker must name a rule the companion rules file declares.",
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
         for (const file of files) {
           const sibling = file.replace(/\.md$/, '.rules.ts');
           const source = await tryReadFile(ctx, sibling);
-          if (source === null) continue; // no rules file — nothing to mention
           const content = await ctx.readFile(file);
           const dMarks = decisionMarkers(getSection(content, '## Decision') ?? '');
           const ddMarks = ddMarkers(getSection(content, "## Do's and Don'ts") ?? '');
-          for (const ruleId of ruleKeysOf(source)) {
+          // No rules file: no keys to require markers for, but any marker present
+          // is a phantom — it states a rule nothing enforces.
+          const declared = source === null ? [] : ruleKeysOf(source);
+          const declaredSet = new Set(declared);
+          for (const [ruleId] of dMarks) {
+            if (!declaredSet.has(ruleId)) {
+              ctx.report.violation({
+                message: `Decision-side marker names rule '${ruleId}' but no such rule exists in '${basename(sibling)}' — implement it or remove the marker (GEN-001 [adr-rule-mentions]).`,
+                file,
+              });
+            }
+          }
+          for (const [ruleId] of ddMarks) {
+            if (!declaredSet.has(ruleId)) {
+              ctx.report.violation({
+                message: `Do's/Don'ts marker names rule '${ruleId}' but no such rule exists in '${basename(sibling)}' — implement it or remove the marker (GEN-001 [adr-rule-mentions]).`,
+                file,
+              });
+            }
+          }
+          for (const ruleId of declared) {
             const anchors = dMarks.get(ruleId) ?? [];
             if (anchors.length !== 1) {
               ctx.report.violation({
@@ -505,6 +527,81 @@ export default {
                 file: rf,
               });
             }
+          }
+        }
+      },
+    },
+
+    'adr-governed-files': {
+      description:
+        '.archgate/adrs/ is flat and fully ADR-shaped: every non-hidden file is a top-level <PREFIX>-<NNN>-<slug> .md / .rules.ts / .rules.test.ts, and every rules/test file has its backing ADR markdown — archgate discovers ADRs by frontmatter, so a misnamed or nested file may still act while this contract cannot see it.',
+      severity: 'error',
+      async check(ctx) {
+        const entries = await ctx.glob(`${ADRS_DIR}**`);
+        const present = new Set(entries);
+        for (const entry of entries) {
+          const base = basename(entry);
+          if (base.startsWith('.')) continue; // editor/OS droppings — not governance surface
+          if (entry.slice(ADRS_DIR.length).includes('/')) {
+            ctx.report.violation({
+              message: `'${entry}' sits in a subdirectory — .archgate/adrs/ is flat; the contract's rules do not reach nested files (GEN-001 [adr-governed-files]).`,
+              file: entry,
+            });
+            continue;
+          }
+          if (RULES_BASENAME_RE.test(base) || RULES_TEST_BASENAME_RE.test(base)) {
+            const backing = `${ADRS_DIR}${base.replace(/\.rules(\.test)?\.ts$/, '.md')}`;
+            if (!present.has(backing)) {
+              ctx.report.violation({
+                message: `'${base}' has no backing ADR '${basename(backing)}' — remove it or restore the ADR; an ADR-less rules file is silently inert (GEN-001 [adr-governed-files]).`,
+                file: entry,
+              });
+            }
+            continue;
+          }
+          if (!ADR_BASENAME_RE.test(base)) {
+            ctx.report.violation({
+              message: `'${base}' does not match the ADR bundle shape <PREFIX>-<NNN>-<slug>.{md,rules.ts,rules.test.ts} — archgate may still discover it while this contract cannot govern it (GEN-001 [adr-governed-files]).`,
+              file: entry,
+            });
+          }
+        }
+      },
+    },
+
+    'adr-paths-inline': {
+      description:
+        'paths:, when present, is an inline YAML flow list (e.g. paths: ["glob"]) — a bare, block-style, or null value parses as empty and silently drops the runtime scope (§2.7).',
+      severity: 'error',
+      async check(ctx) {
+        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
+        for (const file of files) {
+          const fm = extractFrontmatter(await ctx.readFile(file));
+          if (fm === null) continue; // adr-frontmatter owns the missing-frontmatter finding
+          const m = fm.match(/^paths[ \t]*:[ \t]*(.*)$/m);
+          if (m && !/^\[.*\]$/.test(m[1].trim())) {
+            ctx.report.violation({
+              message: `ADR 'paths:' must be an inline flow list like paths: ["glob"] — a bare, block-style, or null value parses as empty and silently drops the runtime scope (GEN-001 [adr-paths-inline]).`,
+              file,
+            });
+          }
+        }
+      },
+    },
+
+    'adr-error-tier': {
+      description:
+        'Every companion rule runs at the error tier (§7): a rules file must not declare a warning- or info-tier severity.',
+      severity: 'error',
+      async check(ctx) {
+        const rulesFiles = await ctx.glob(RULES_GLOB);
+        for (const rf of rulesFiles) {
+          const source = await ctx.readFile(rf);
+          for (const m of source.matchAll(/severity[ \t]*:[ \t]*["'](warning|info)["']/g)) {
+            ctx.report.violation({
+              message: `Rules file declares a '${m[1]}' severity but GEN-001 §7 runs every rule at 'error' — change or drop it (GEN-001 [adr-error-tier]).`,
+              file: rf,
+            });
           }
         }
       },

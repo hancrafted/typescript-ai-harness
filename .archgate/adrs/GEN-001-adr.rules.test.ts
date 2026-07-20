@@ -328,3 +328,102 @@ describe('adr-message-provenance', () => {
     expect(violations.some((v) => /must embed the provenance literal/.test(v.message))).toBe(true);
   });
 });
+
+describe('adr-rule-mentions (reverse direction)', () => {
+  it('fails when a marker names a rule the rules file does not declare', async () => {
+    const decision = '### 1. Thing (📜 Rule: `demo-rule`)\n\nAlso ghosted. (📜 Rule: `ghost-rule`)\n\n1. Body.';
+    const dosDonts = "1. **DO** it. (Decision 1, 📜 Rule: `demo-rule`)\n\n1. **DON'T** skip.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith(decision, dosDonts), [RULES_PATH]: DEMO_RULES });
+    await rules['adr-rule-mentions'].check(ctx);
+    expect(violations.some((v) => /names rule 'ghost-rule' but no such rule exists/.test(v.message))).toBe(true);
+  });
+
+  it('flags markers as phantoms when the ADR has no rules file at all', async () => {
+    const decision = '### 1. Thing (📜 Rule: `demo-rule`)\n\n1. Body.';
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith(decision, '1. **DO** x.') });
+    await rules['adr-rule-mentions'].check(ctx);
+    expect(violations.some((v) => /names rule 'demo-rule' but no such rule exists/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-governed-files', () => {
+  it('passes a flat directory of ADR bundle files', async () => {
+    const { ctx, violations } = makeCtx({ ...passingFiles(), [TEST_PATH]: '' });
+    await rules['adr-governed-files'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails on a stray non-ADR-shaped file', async () => {
+    const { ctx, violations } = makeCtx({ ...passingFiles(), '.archgate/adrs/notes.md': 'scratch' });
+    await rules['adr-governed-files'].check(ctx);
+    expect(violations.some((v) => /does not match the ADR bundle shape/.test(v.message))).toBe(true);
+  });
+
+  it('fails on a file in a subdirectory', async () => {
+    const { ctx, violations } = makeCtx({ ...passingFiles(), '.archgate/adrs/sub/GEN-050-nested.md': VALID_ADR });
+    await rules['adr-governed-files'].check(ctx);
+    expect(violations.some((v) => /sits in a subdirectory/.test(v.message))).toBe(true);
+  });
+
+  it('fails on an ADR-less rules file (silently inert)', async () => {
+    const { ctx, violations } = makeCtx({ ...passingFiles(), '.archgate/adrs/GEN-051-ghost.rules.ts': DEMO_RULES });
+    await rules['adr-governed-files'].check(ctx);
+    expect(violations.some((v) => /has no backing ADR 'GEN-051-ghost.md'/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-paths-inline', () => {
+  it('passes an inline flow list and an absent paths key', async () => {
+    const files = passingFiles();
+    files['.archgate/adrs/GEN-052-scopeless.md'] = VALID_ADR.replace('paths: [".archgate/adrs/**/*.md"]\n', '').replace(
+      'id: GEN-001',
+      'id: GEN-052',
+    );
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-paths-inline'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails a block-style paths list', async () => {
+    const files = passingFiles();
+    files[ADR_PATH] = VALID_ADR.replace('paths: [".archgate/adrs/**/*.md"]', 'paths:\n  - ".archgate/adrs/**/*.md"');
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-paths-inline'].check(ctx);
+    expect(violations.some((v) => /must be an inline flow list/.test(v.message))).toBe(true);
+  });
+
+  it('fails a null paths value', async () => {
+    const files = passingFiles();
+    files[ADR_PATH] = VALID_ADR.replace('paths: [".archgate/adrs/**/*.md"]', 'paths: null');
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-paths-inline'].check(ctx);
+    expect(violations.some((v) => /must be an inline flow list/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-error-tier', () => {
+  it('passes rules declaring error severity or none', async () => {
+    const src =
+      "export default { rules: { 'demo-rule': { severity: 'error', async check() {} }, 'other-rule': { async check() {} } } };";
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: src });
+    await rules['adr-error-tier'].check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails a warning-tier rule', async () => {
+    const src = "export default { rules: { 'demo-rule': { severity: 'warning', async check() {} } } };";
+    const { ctx, violations } = makeCtx({ [RULES_PATH]: src });
+    await rules['adr-error-tier'].check(ctx);
+    expect(violations.some((v) => /runs every rule at 'error'/.test(v.message))).toBe(true);
+  });
+});
+
+describe('adr-required-sections (fenced headings)', () => {
+  it('does not count a heading that only appears inside a fenced block', async () => {
+    const files = passingFiles();
+    files[ADR_PATH] = VALID_ADR.replace('## References', '```md\n## References\n```');
+    const { ctx, violations } = makeCtx(files);
+    await rules['adr-required-sections'].check(ctx);
+    expect(violations.some((v) => /missing the mandatory section '## References'/.test(v.message))).toBe(true);
+  });
+});
