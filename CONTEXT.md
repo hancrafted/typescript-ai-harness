@@ -27,3 +27,17 @@ _Avoid_: destination, consumer, client
 **Tool-owned config file**:
 A config file the tool writes and fully overwrites on re-run (`eslint.config.js`, the prettier config, `vitest.config.ts`, `.husky/*`, `.archgate/*`). Contrast with `package.json`, which is surgically merged, never overwritten.
 _Avoid_: generated file, output file
+
+## ADR governance
+
+**ADR Contract**:
+The self-hosted ADR (`GEN-001-adr`) that governs the shape and runtime delivery of every ADR under `.archgate/adrs/` — the ADR *about* ADRs. Self-hosting means its own rules validate its own file. Distinct from an individual design/decision ADR, which it governs.
+_Avoid_: meta-ADR, ADR spec
+
+**Runtime loading channel**:
+The mechanism that puts a governing ADR into an agent's context *during* a session, not only at commit — a symlink from `.claude/rules/` to the ADR, scoped by the ADR's `paths:`. It is *soft* (context plus instruction); archgate at commit/push is the hard backstop.
+_Avoid_: rule injection, context loader
+
+**paths (ADR field)**:
+An ADR's single declared glob scope. It both documents the ADR's governance surface and triggers Claude Code to load the ADR when a matching file is Read. The one source of scope — there is no second list.
+_Avoid_: `files` (the retired field name), scope globs

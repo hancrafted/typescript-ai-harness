@@ -1,0 +1,1 @@
+../../.archgate/adrs/GEN-001-adr.md
