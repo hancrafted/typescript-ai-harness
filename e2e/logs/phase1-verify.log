@@ -1,0 +1,15 @@
+
+> ai-harness-setup@0.0.1 verify
+> eslint . && prettier --check . && tsc --noEmit && vitest run
+
+Checking formatting...
+All matched files use Prettier code style!
+
+ RUN  v4.1.10 /Users/han/Developer/ai-harness-setup/.claude/worktrees/harness-e2e
+
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  20:02:09
+   Duration  173ms (transform 36ms, setup 0ms, import 50ms, tests 22ms, environment 0ms)
+

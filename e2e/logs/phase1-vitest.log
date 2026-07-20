@@ -1,0 +1,9 @@
+
+ RUN  v4.1.10 /Users/han/Developer/ai-harness-setup/.claude/worktrees/harness-e2e
+
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  20:02:07
+   Duration  176ms (transform 39ms, setup 0ms, import 54ms, tests 21ms, environment 0ms)
+

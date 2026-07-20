@@ -1,0 +1,15 @@
+
+> full@0.0.0 verify
+> eslint . && prettier --check . && tsc --noEmit && vitest run
+
+Checking formatting...
+All matched files use Prettier code style!
+
+ RUN  v4.1.10 /private/tmp/harness-e2e/full
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:07:31
+   Duration  115ms (transform 8ms, setup 0ms, import 13ms, tests 1ms, environment 0ms)
+

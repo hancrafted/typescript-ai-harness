@@ -1,0 +1,43 @@
+
+===================== CASE full =====================
+install full rc=0 (log: install-full.log)
+  verify        = eslint . && prettier --check . && tsc --noEmit && vitest run
+  verify:commit = lint-staged && tsc --noEmit && vitest run
+RESULT | case=full | step=control | EXIT=0 | EXPECT=pass
+RESULT | case=full | step=verify-eslint-break | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=eslint-cmd | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=verify-prettier-break | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=prettier-cmd | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=eslint-isolation | EXIT=0 | EXPECT=pass
+RESULT | case=full | step=verify-tsc-break | EXIT=2 | EXPECT=fail
+RESULT | case=full | step=tsc-cmd | EXIT=2 | EXPECT=fail
+RESULT | case=full | step=eslint-isolation-tsc | EXIT=0 | EXPECT=pass
+RESULT | case=full | step=verify-vitest-break | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=vitest-cmd | EXIT=1 | EXPECT=fail
+RESULT | case=full | step=commit-clean-tree | EXIT=0 | EXPECT=pass
+RESULT | case=full | step=commit-broken-tree | EXIT=1 | EXPECT=fail
+
+================= CASE eslint-only ==================
+install eslint-only rc=0 (log: install-eslint-only.log)
+  verify        = eslint . && tsc --noEmit
+  verify:commit = lint-staged && tsc --noEmit
+RESULT | case=eslint-only | step=control | EXIT=0 | EXPECT=pass
+RESULT | case=eslint-only | step=verify-fail | EXIT=1 | EXPECT=fail
+
+=============== CASE eslint-prettier ================
+install eslint-prettier rc=0 (log: install-eslint-prettier.log)
+  verify        = eslint . && prettier --check . && tsc --noEmit
+  verify:commit = lint-staged && tsc --noEmit
+  eslint-config-prettier composed? 2 match(es) in eslint.config.mjs
+RESULT | case=eslint-prettier | step=control | EXIT=0 | EXPECT=pass
+RESULT | case=eslint-prettier | step=verify-fail | EXIT=1 | EXPECT=fail
+RESULT | case=eslint-prettier | step=eslint-isolation | EXIT=0 | EXPECT=pass
+
+================= CASE vitest-only ==================
+install vitest-only rc=0 (log: install-vitest-only.log)
+  verify        = tsc --noEmit && vitest run
+  verify:commit = lint-staged && tsc --noEmit && vitest run
+RESULT | case=vitest-only | step=control | EXIT=0 | EXPECT=pass
+RESULT | case=vitest-only | step=verify-fail | EXIT=1 | EXPECT=fail
+
+===================== DONE =====================

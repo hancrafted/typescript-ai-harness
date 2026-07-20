@@ -1,0 +1,6 @@
+{
+  "integrations": ["eslint", "prettier", "husky"],
+  "eslint": { "rules": ["complexity", "max-lines-per-function", "max-params", "max-depth", "max-lines"] },
+  "prettier": { "importSort": "organize-imports" },
+  "husky": { "hooks": ["pre-commit", "pre-push"] }
+}

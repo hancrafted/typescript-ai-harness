@@ -1,0 +1,68 @@
+#!/usr/bin/expect -f
+# Drives the interactive `npx github:hancrafted/ai-harness-setup` end-to-end
+# through a pseudo-tty (clack requires a TTY). Selection:
+#   integrations: DESELECT archgate (first item) -> eslint, prettier, vitest, husky
+#   eslint rules: accept all (enter)
+#   prettier: sorting on (enter) -> organize-imports default (enter)
+#   husky hooks: pre-commit + pre-push defaults (enter)
+#   confirm: yes (enter)
+# Exit code mirrors the child's; nonzero from this script = a stage timed out.
+
+set timeout 300
+log_user 1
+
+# Force a wide pty; the default is tiny and clack wraps the prompt to one
+# character per line, which breaks multi-character regex matching.
+set stty_init "cols 200 rows 50"
+
+spawn npx -y github:hancrafted/ai-harness-setup
+
+expect {
+  -re "harness integrations" {}
+  timeout { puts "\n>>> TIMEOUT: integrations prompt"; exit 2 }
+}
+send " "
+sleep 0.4
+send "\r"
+
+expect {
+  -re "clean-code rules" {}
+  timeout { puts "\n>>> TIMEOUT: eslint rules prompt"; exit 3 }
+}
+send "\r"
+
+expect {
+  -re "enable automatic import" {}
+  timeout { puts "\n>>> TIMEOUT: prettier enable prompt"; exit 4 }
+}
+send "\r"
+
+expect {
+  -re "import-sort plugin" {}
+  timeout { puts "\n>>> TIMEOUT: prettier plugin prompt"; exit 5 }
+}
+send "\r"
+
+expect {
+  -re "which git hooks" {}
+  timeout { puts "\n>>> TIMEOUT: husky hooks prompt"; exit 6 }
+}
+send "\r"
+
+expect {
+  -re "Apply this harness" {}
+  timeout { puts "\n>>> TIMEOUT: confirm prompt"; exit 7 }
+}
+send "\r"
+
+set timeout 420
+expect {
+  -re "Done\\. Review" { puts "\n>>> APPLY DONE" }
+  -re "Aborted" { puts "\n>>> ABORTED"; exit 8 }
+  eof { puts "\n>>> EOF (no outro seen)" }
+  timeout { puts "\n>>> TIMEOUT during apply"; exit 9 }
+}
+
+expect eof
+catch wait result
+puts "\n>>> CHILD_EXIT_CODE=[lindex $result 3]"

@@ -1,0 +1,5 @@
+{
+  "integrations": ["eslint", "husky"],
+  "eslint": { "rules": ["complexity", "max-lines-per-function", "max-params", "max-depth", "max-lines"] },
+  "husky": { "hooks": ["pre-commit", "pre-push"] }
+}

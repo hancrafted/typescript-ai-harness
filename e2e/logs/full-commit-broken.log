@@ -1,0 +1,24 @@
+
+> full@0.0.0 verify:commit
+> lint-staged && tsc --noEmit && vitest run
+
+[STARTED] Backing up original state...
+[COMPLETED] Backed up original state in git stash (3e29fb2)
+[STARTED] Running tasks for staged files...
+[STARTED] .lintstagedrc.json — 1 file
+[STARTED] *.ts — 1 file
+[STARTED] *.{js,mjs,cjs,json,md,yml,yaml} — 0 files
+[SKIPPED] *.{js,mjs,cjs,json,md,yml,yaml} — no files
+[STARTED] eslint --fix
+[COMPLETED] eslint --fix
+[STARTED] prettier --write
+[COMPLETED] prettier --write
+[COMPLETED] *.ts — 1 file
+[COMPLETED] .lintstagedrc.json — 1 file
+[COMPLETED] Running tasks for staged files...
+[STARTED] Staging changes from tasks...
+[COMPLETED] Staging changes from tasks...
+[STARTED] Cleaning up temporary files...
+[COMPLETED] Cleaning up temporary files...
+src/tsc-fail.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.
+husky - pre-commit script failed (code 2)
