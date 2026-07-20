@@ -4,7 +4,7 @@ id: GEN-001
 title: "ADR Contract"
 domain: general
 rules: true
-paths: [".archgate/adrs/**/*.md"]
+paths: [".archgate/adrs/**/*.{md,ts}"]
 description: "The shape and runtime-loading contract every ADR under .archgate/adrs/ obeys: frontmatter bundle and order, six canonical sections, and a .claude/rules symlink that loads the ADR into agent context on Read."
 ---
 
@@ -30,7 +30,7 @@ Alternatives considered: (1) prose-convention only, no meta-rules — rejected, 
 ### 1. Scope and self-hosting
 
 1. This contract governs every ADR markdown file under `.archgate/adrs/` whose basename matches `<PREFIX>-<NNN>-<slug>.md`.
-2. GEN-001 is self-hosting: its own file and companion `.rules.ts` satisfy every rule below.
+2. GEN-001 is self-hosting: its own file and companion `.rules.ts` satisfy every rule below, and its `paths:` spans the whole bundle (`.md`, `.rules.ts`, tests), so the contract loads whichever piece an agent opens.
 3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are explicitly out of scope — owned by `GEN-002-frontmatter` and a future index ADR respectively.
 
 ### 2. Frontmatter contract (📜 Rule: `adr-frontmatter`)
@@ -41,10 +41,11 @@ Alternatives considered: (1) prose-convention only, no meta-rules — rejected, 
 4. `id` MUST match the filename prefix (`GEN-001-adr.md` carries `id: GEN-001`).
 5. `domain` MUST be a registered archgate domain (built-in or `.archgate/config.json` custom).
 6. `rules: true` MUST have a sibling `<basename>.rules.ts`, and an existing sibling `.rules.ts` MUST have `rules: true` — both directions.
+7. `paths`, when present, MUST be written inline (YAML flow form) — e.g. `paths: [".archgate/adrs/**/*.{md,ts}"]`. A block-style list parses as empty, and §4.3 then bans the symlink: runtime scope silently degrades to nothing. Unlinted — a manual review duty.
 
 ### 3. Required sections (📜 Rule: `adr-required-sections`)
 
-Every ADR MUST carry exactly these six H2 headings (exact text, presence-only): `## Context`, `## Decision`, `## Do's and Don'ts`, `## Consequences`, `## Compliance and Enforcement`, `## References`. Additional sections are permitted.
+Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): `## Context`, `## Decision`, `## Do's and Don'ts`, `## Consequences`, `## Compliance and Enforcement`, `## References`. Additional sections are permitted.
 
 ### 4. Runtime loading channel (📜 Rule: `adr-claude-rules-symlink`)
 
@@ -71,7 +72,7 @@ Every ADR MUST carry exactly these six H2 headings (exact text, presence-only): 
 1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-002's, INDEX routing is the index ADR's.
 2. **DON'T** leave a `.claude/rules` ADR entry behind when its backing ADR is deleted or drops its `paths:` — remove the symlink in the same change.
 3. **DON'T** flip the enforcement tier or add new rules outside an explicit ADR amendment.
-4. **DON'T** author `paths:` in YAML block-list form — write it inline (e.g. `paths: [".archgate/adrs/**/*.md"]`). Block form is read as empty, silently dropping the runtime symlink with no violation raised.
+4. **DON'T** author `paths:` as a YAML block-style list — inline flow form only (§2.7).
 5. **DON'T** attach a `.claude/rules` symlink to an ADR whose `paths:` is empty or absent — an ADR that governs nothing at runtime carries no runtime entry.
 
 ## Consequences
@@ -86,24 +87,24 @@ Every ADR MUST carry exactly these six H2 headings (exact text, presence-only): 
 
 **Negative:**
 
-1. One `.claude/rules` symlink per scoped ADR is extra surface to keep in sync — mitigated: `adr-claude-rules-symlink` fails on drift.
-2. The symlink-not-copy check rides on archgate's file reader not following symlinks — a behavioral dependency, not a documented API guarantee. If a future archgate release follows symlinks, copy-detection weakens to existence-only (it still catches missing and orphaned entries).
-3. Inline-only `paths:` carries a silent-failure mode: a block-form `paths:` reads as empty, so a scoping slip drops the runtime symlink with no lint error — governance degrades invisibly. Guarded only by the inline convention (DON'T-4) and manual review, not by a rule.
+1. **Symlink upkeep:** one `.claude/rules` symlink per scoped ADR is extra surface to keep in sync — mitigated: `adr-claude-rules-symlink` fails on drift.
+2. **Undocumented dependency:** the symlink-not-copy check rides on archgate's file reader not following symlinks — observed behavior, not an API guarantee. If a future archgate release follows symlinks, copy-detection weakens to existence-only (it still catches missing and orphaned entries).
+3. **Silent block-form failure:** a block-style `paths:` parses as empty and drops runtime scope with no lint error (§2.7) — guarded by manual review only, not by a rule.
 
 **Risks:**
 
-1. **Platform symlink support.** Windows requires Administrator or Developer Mode for symlinks. This repo (self-hosting, macOS/Linux) is unaffected, but the future CLI-template phase that ships this contract into arbitrary target projects MUST provide the copy-body generator fallback for such platforms. Documented, not built.
-2. **Loader drift.** Claude Code's `.claude/rules` behavior is a versioned feature. Mitigation: the `paths:` + symlink contract is documented and stable; if it regresses, pivot to the generator fallback with zero ADR renames.
+1. **Platform symlink support:** Windows requires Administrator or Developer Mode for symlinks. This repo (self-hosting, macOS/Linux) is unaffected, but the future CLI-template phase that ships this contract into arbitrary target projects MUST provide the copy-body generator fallback for such platforms. Documented, not built.
+2. **Loader drift:** Claude Code's `.claude/rules` behavior is a versioned feature. Mitigation: the `paths:` + symlink contract is documented and stable; if it regresses, pivot to the generator fallback with zero ADR renames.
 
 ## Compliance and Enforcement
 
 Enforced by companion `GEN-001-adr.rules.ts`, scoped to ADR basenames under `.archgate/adrs/`:
 
-- `adr-frontmatter` (error) — §2 bundle: keys present, order, `type: adr`, id/filename match, domain registered, `rules` ⇔ sibling.
+- `adr-frontmatter` (error) — §2.1–2.6: keys present, order, `type: adr`, id/filename match, domain registered, `rules` ⇔ sibling.
 - `adr-required-sections` (error) — §3 six canonical headings.
 - `adr-claude-rules-symlink` (error) — §4 symlink presence and symlink-not-copy, plus the no-`paths` and orphan directions.
 
-**Manual review duties** (never linted): `paths:` globs actually describe the ADR's real governance surface; section bodies are substantive, not empty placeholders that pass the presence-only check.
+**Manual review duties** (never linted): `paths:` is written inline (§2.7); `paths:` globs actually describe the ADR's real governance surface; section bodies are substantive, not empty placeholders that pass the presence-only check.
 
 **Templates/scaffolding:** self-hosting only for now. The future CLI-template phase ships this contract — with the copy-body fallback for symlink-hostile platforms — into target projects; that packaging is out of scope here.
 
@@ -113,6 +114,3 @@ Enforced by companion `GEN-001-adr.rules.ts`, scoped to ADR basenames under `.ar
 
 - [Claude Code — memory & `.claude/rules` path-scoped rules](https://code.claude.com/docs/en/memory#organize-rules-with-claude/rules/) — the runtime loading mechanism §4 relies on (`paths:` field, glob matching, symlink support).
 - [archgate](https://archgate.dev/) — ADR authoring path and the deterministic rule model.
-- `CONTEXT.md` — repo glossary (ADR Contract, runtime loading channel, `paths:`, self-hosting).
-- `GEN-002-frontmatter` (planned) — the universal frontmatter floor; owns the repo-wide semantics of `type`.
-- Future index ADR + skill (planned) — portable cross-harness routing; tracked as a GitHub issue.
