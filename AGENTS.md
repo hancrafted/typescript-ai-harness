@@ -27,7 +27,7 @@ This project uses workflow and skills proposed by [Matt Pocock](https://github.c
 
 ## Tech Stack
 
-TypeScript 7 and NodeJs
+TypeScript 6 and NodeJs. Pinned below TS7 — `typescript-eslint`'s peer range caps at `<6.1.0` (TS7 lacks the stable programmatic API type-aware rules need). Upgrade tracked in [#2](https://github.com/hancrafted/ai-harness-setup/issues/2), gated on upstream dependency compatibility.
 
 ## Agent skills
 
