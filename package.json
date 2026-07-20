@@ -20,6 +20,8 @@
     "src"
   ],
   "scripts": {
+    "run": "npx tsx bin/ai-harness-setup.mjs",
+    "run:dry": "npx tsx bin/ai-harness-setup.mjs --dry-run",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "format": "prettier --write .",

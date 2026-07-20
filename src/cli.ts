@@ -7,7 +7,8 @@ import { orExit } from './prompt-util';
 import { summarize } from './summary';
 import type { Answers, IntegrationId } from './types';
 
-async function selectIntegrations(): Promise<IntegrationId[]> {
+async function selectIntegrations(yes: boolean): Promise<IntegrationId[]> {
+  if (yes) return registry.map((integration) => integration.id);
   return orExit(
     await multiselect({
       message: 'Which harness integrations? (all preselected — space toggles, enter confirms)',
@@ -18,9 +19,16 @@ async function selectIntegrations(): Promise<IntegrationId[]> {
   );
 }
 
-async function gatherAnswers(): Promise<Answers> {
-  const integrations = await selectIntegrations();
+/**
+ * `--yes`: skip every prompt and apply defaults (Testing Decisions' "untested
+ * prompt shell" bypass, now exposed as a real flag). Integrations are all
+ * selected; sub-option choices are left `undefined` so each Integration's own
+ * `plan()` fallback (already required for tests) supplies the default.
+ */
+async function gatherAnswers(yes: boolean): Promise<Answers> {
+  const integrations = await selectIntegrations(yes);
   const answers: Answers = { integrations };
+  if (yes) return answers;
   for (const integration of registry) {
     if (!integrations.includes(integration.id) || !integration.promptSubOptions) continue;
     Object.assign(answers, { [integration.id]: await integration.promptSubOptions() });
@@ -28,13 +36,15 @@ async function gatherAnswers(): Promise<Answers> {
   return answers;
 }
 
-async function confirmAndApply(answers: Answers, cwd: string): Promise<void> {
+async function confirmAndApply(answers: Answers, cwd: string, yes: boolean): Promise<void> {
   const actions = buildPlan(answers, cwd);
   note(summarize(actions).join('\n'), 'Planned changes');
-  const ok = await confirm({ message: 'Apply this harness to the current project?' });
-  if (isCancel(ok) || !ok) {
-    cancel('Aborted — nothing was changed.');
-    return;
+  if (!yes) {
+    const ok = await confirm({ message: 'Apply this harness to the current project?' });
+    if (isCancel(ok) || !ok) {
+      cancel('Aborted — nothing was changed.');
+      return;
+    }
   }
   const progress = spinner();
   progress.start('Applying harness');
@@ -50,11 +60,12 @@ function previewOnly(answers: Answers, cwd: string): void {
 
 export async function main(): Promise<void> {
   const dryRun = process.argv.includes('--dry-run');
+  const yes = process.argv.includes('--yes');
   const cwd = process.cwd();
   intro('ai-harness-setup');
-  const answers = await gatherAnswers();
+  const answers = await gatherAnswers(yes);
   if (dryRun) previewOnly(answers, cwd);
-  else await confirmAndApply(answers, cwd);
+  else await confirmAndApply(answers, cwd, yes);
 }
 
 main().catch((error: unknown) => {
