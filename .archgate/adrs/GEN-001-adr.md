@@ -40,9 +40,9 @@ Alternatives considered: (1) A generator that copies each ADR body into `.claude
 
 Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): `## Context`, `## Decision`, `## Do's and Don'ts`, `## Consequences`, `## Compliance and Enforcement`, `## References`. Additional sections are permitted.
 
-### 4. Runtime loading channel (📜 Rule: `adr-claude-rules-symlink`)
+### 4. Claude Code rules symlink (📜 Rule: `adr-claude-rules-symlink`)
 
-1. An ADR declaring a non-empty `paths:` MUST have a companion **symlink** at `.claude/rules/<basename-lowercased>.md` resolving to it — e.g. `.claude/rules/gen-001-adr.md → ../../.archgate/adrs/GEN-001-adr.md`. Claude Code loads the symlinked ADR into context on Read of any file matching the ADR's `paths:` globs.
+1. This symlink is the **runtime enforcement layer**: a soft channel unique to Claude Code that steers the agent as it works, ahead of archgate's hard commit/push backstop (§4.6). An ADR declaring a non-empty `paths:` MUST have a companion **symlink** at `.claude/rules/<basename-lowercased>.md` resolving to it — e.g. `.claude/rules/gen-001-adr.md → ../../.archgate/adrs/GEN-001-adr.md`. Claude Code loads the symlinked ADR into context on Read of any file matching the ADR's `paths:` globs.
 2. The runtime entry MUST be a symlink (a pointer), never a copied body. archgate enforces this without special APIs: its file reader does not follow symlinks, so a `.claude/rules` ADR entry it *can* open is a copy and fails the rule; one it cannot open is a genuine symlink and passes.
 3. An ADR with empty or absent `paths:` MUST NOT have such a symlink — it governs nothing at runtime.
 4. Every ADR-named symlink under `.claude/rules/` (basename `<prefix>-<nnn>-<slug>.md`) MUST have a backing ADR with a non-empty `paths:`; orphaned symlinks are a violation. Hand-written, non-ADR-named rule files are left untouched.
@@ -93,8 +93,7 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 2. **Just-in-time governance:** the governing ADR loads into agent context the moment a governed file is opened — compliance happens before the archgate backstop rejects at push.
 3. **Single source of scope:** `paths:` drives both the lint-scope documentation and the runtime load trigger, so there is no second list to drift.
 4. **Dogfooded:** GEN-001's own rules validate its own file and symlink on every `archgate check`.
-5. **Zero build step:** the runtime entry is a pointer, not a generated copy, so it cannot go stale relative to the ADR body.
-6. **Rule ↔ prose traceability:** every companion rule is marked on both the Decision and the Do's/Don'ts sides, so no rule enforces something the ADR never states and no stated rule goes unenforced — the correspondence is machine-checked, not trusted.
+5. **Rule ↔ prose traceability:** every companion rule is marked on both the Decision and the Do's/Don'ts sides, so no rule enforces something the ADR never states and no stated rule goes unenforced — the correspondence is machine-checked, not trusted.
 
 **Negative:**
 
@@ -110,17 +109,7 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only): 
 
 ## Compliance and Enforcement
 
-Enforced by companion `GEN-001-adr.rules.ts`, scoped to ADR basenames under `.archgate/adrs/`:
-
-- `adr-frontmatter` (error) — §2.1–2.6: keys present, order, `type: adr`, id/filename match, domain registered, `rules` ⇔ sibling.
-- `adr-required-sections` (error) — §3 six canonical headings.
-- `adr-claude-rules-symlink` (error) — §4 symlink presence and symlink-not-copy, plus the no-`paths` and orphan directions.
-- `adr-numbered-decision` (error) — §5.1: numbered `### N.` Decision anchors and sequential per-anchor ordered lists.
-- `adr-numbered-dos-donts` (error) — §5.2: the Do's and the Don'ts each a sequential ordered list restarting at 1.
-- `adr-rule-mentions` (error) — §5.3: every rule marked on the Decision and Do's/Don'ts sides, back-references aligned.
-- `adr-no-review-tag` (error) — §5.4: no retired `[review]` tag outside code spans.
-- `adr-rules-test-sibling` (error) — §6.1: every `.rules.ts` has a sibling `.rules.test.ts`.
-- `adr-message-provenance` (error) — §6.2: every rule embeds its `(<ID> [<rule-key>])` provenance tag.
+Automated: `GEN-001-adr.rules.ts` enforces these nine rules, all at `error` (§7), scoped to ADR basenames under `.archgate/adrs/`; each is marked inline via `📜 Rule:` at its deciding anchor in §2–§6: `adr-frontmatter`, `adr-required-sections`, `adr-claude-rules-symlink`, `adr-numbered-decision`, `adr-numbered-dos-donts`, `adr-rule-mentions`, `adr-no-review-tag`, `adr-rules-test-sibling`, `adr-message-provenance`.
 
 **Manual review duties** (never linted): `paths:` is written inline (§2.7); `paths:` globs actually describe the ADR's real governance surface; the sibling `.rules.test.ts` exercises each rule's pass and fail path (§6.1); section bodies are substantive, not empty placeholders that pass the presence-only check.
 

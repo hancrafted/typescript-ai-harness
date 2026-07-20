@@ -25,8 +25,12 @@ The external project the harness is installed into. Distinct from this tool's ow
 _Avoid_: destination, consumer, client
 
 **Tool-owned config file**:
-A config file the tool writes and fully overwrites on re-run (`eslint.config.js`, the prettier config, `vitest.config.ts`, `.husky/*`, `.archgate/*`). Contrast with `package.json`, which is surgically merged, never overwritten.
+A config file the tool writes and fully overwrites on re-run (`eslint.config.mjs`, the prettier config, `vitest.config.ts`, `.husky/*`). Contrast with `package.json` (surgically merged, never overwritten) and a Seeded config file (written once, never clobbered).
 _Avoid_: generated file, output file
+
+**Seeded config file**:
+A config file the tool writes only when absent and never overwrites on re-run, because the Target project grows it after scaffolding (`tsconfig.json`, `.archgate/config.json`, `.claude/settings.local.json`). Distinct from a Tool-owned config file, which is regenerated every run.
+_Avoid_: template, default, starter file
 
 ## ADR governance
 
@@ -34,9 +38,9 @@ _Avoid_: generated file, output file
 The self-hosted ADR (`GEN-001-adr`) that governs the shape and runtime delivery of every ADR under `.archgate/adrs/` — the ADR *about* ADRs. Self-hosting means its own rules validate its own file. Distinct from an individual design/decision ADR, which it governs.
 _Avoid_: meta-ADR, ADR spec
 
-**Runtime loading channel**:
-The mechanism that puts a governing ADR into an agent's context *during* a session, not only at commit — a symlink from `.claude/rules/` to the ADR, scoped by the ADR's `paths:`. It is *soft* (context plus instruction); archgate at commit/push is the hard backstop.
-_Avoid_: rule injection, context loader
+**Claude Code rules symlink**:
+The runtime enforcement layer that puts a governing ADR into an agent's context *during* a session, not only at commit — a symlink from `.claude/rules/` to the ADR, scoped by the ADR's `paths:`. It is *soft* (context plus instruction); archgate at commit/push is the hard backstop.
+_Avoid_: Runtime loading channel (retired name), rule injection, context loader
 
 **paths (ADR field)**:
 An ADR's single declared glob scope. It both documents the ADR's governance surface and triggers Claude Code to load the ADR when a matching file is Read. The one source of scope — there is no second list.
