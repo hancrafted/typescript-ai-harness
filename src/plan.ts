@@ -35,7 +35,7 @@ export function buildPlan(answers: Answers, cwd: string): Action[] {
     // TypeScript is baseline: `verify` runs `tsc --noEmit` and a target may have
     // no tsconfig. Not a selectable Integration (ADR-0002).
     { kind: 'installDeps', dev: ['typescript'] },
-    { kind: 'appendLines', path: '.gitignore', lines: ['node_modules/'] },
+    { kind: 'appendLines', path: '.gitignore', lines: ['node_modules/', '.env'] },
     { kind: 'writeFile', path: 'tsconfig.json', contents: TSCONFIG, overwrite: false },
   ];
   for (const integration of registry) {

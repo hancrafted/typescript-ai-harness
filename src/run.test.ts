@@ -68,6 +68,7 @@ describe('run — materialized files', () => {
     expect(has('tsconfig.json')).toBe(true);
     expect(read('.prettierignore')).toContain('coverage');
     expect(read('.gitignore')).toContain('node_modules/');
+    expect(read('.gitignore')).toContain('.env');
     expect(read('.gitignore')).toContain('coverage/');
   });
 
