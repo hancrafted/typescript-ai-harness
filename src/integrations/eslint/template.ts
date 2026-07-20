@@ -33,7 +33,7 @@ function header(withPrettier: boolean): string {
 const OPEN = `
 
 export default tseslint.config(
-  { ignores: ['node_modules/**', 'dist/**', 'coverage/**'] },
+  { ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.archgate/**'] },
   {
     files: ['**/*.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended, tseslint.configs.stylistic],
