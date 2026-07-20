@@ -45,3 +45,21 @@ _Avoid_: Runtime loading channel (retired name), rule injection, context loader
 **paths (ADR field)**:
 An ADR's single declared glob scope. It both documents the ADR's governance surface and triggers Claude Code to load the ADR when a matching file is Read. The one source of scope — there is no second list.
 _Avoid_: `files` (the retired field name), scope globs
+
+## Frontmatter governance
+
+**Frontmatter floor**:
+The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title` + `description`. A floor, not a ceiling — a Zone may require more, never less. Owned by `GEN-002-frontmatter`.
+_Avoid_: frontmatter schema, header, metadata block
+
+**Zone**:
+A path-glob region of the repo carrying one frontmatter policy: either *exempt* (no floor) or *governed* (floor required, plus an optional closed `allowedTypes` set). Zones are declared and ordered in the frontmatter config; a file matching no Zone is exempt by default. Posture (allowlist vs denylist) is emergent from which Zones are declared, not a mode flag.
+_Avoid_: scope, surface, path rule
+
+**Design ADR**:
+A prose decision record under `docs/adr/` (`type: design-adr`) authored via the Matt-Pocock `/domain-modeling` skill — the lightweight *why*. Distinct from a Governance ADR; the two coexist and are disambiguated by `type`, never by prose.
+_Avoid_: ADR (ambiguous — always qualify design vs governance)
+
+**Governance ADR**:
+An archgate ADR under `.archgate/adrs/` (`type: adr`) with an executable `*.rules.ts` companion — the deterministic enforcement layer, governed by the ADR Contract (`GEN-001-adr`). Distinct from a Design ADR.
+_Avoid_: meta-ADR; bare "ADR" (ambiguous — always qualify)
