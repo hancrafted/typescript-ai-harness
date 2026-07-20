@@ -9,7 +9,7 @@ rules: false
 
 ## Context
 
-This is an example ADR for the ai-harness-setup project. Replace this with a real architecture decision.
+This is an example ADR for the typescript-ai-harness project. Replace this with a real architecture decision.
 
 ADRs capture important architectural decisions along with their context and consequences. Each ADR should be a short document that addresses a single decision.
 

@@ -1,11 +1,11 @@
 ---
 name: ai-workspace-reference-harness
-description: ~/ai-workspace is the canonical reference harness that ai-harness-setup packages (archgate, eslint, prettier, vitest, husky)
+description: ~/ai-workspace is the canonical reference harness that typescript-ai-harness packages (archgate, eslint, prettier, vitest, husky)
 metadata:
   type: reference
 ---
 
-`~/ai-workspace` is Han's existing workspace whose dev-tooling harness this project (`ai-harness-setup`) is built to package and distribute. When designing or verifying Integration defaults — eslint tiers/rules, vitest config, husky hooks, `verify` scripts, archgate setup — that repo is the reference to consult.
+`~/ai-workspace` is Han's existing workspace whose dev-tooling harness this project (`typescript-ai-harness`) is built to package and distribute. When designing or verifying Integration defaults — eslint tiers/rules, vitest config, husky hooks, `verify` scripts, archgate setup — that repo is the reference to consult.
 
 Caveats (verify against live files; it evolves independently):
 - It has **no prettier config and no lint-staged** — both were *defined fresh* for this tool (see `docs/adr/0006-prettier-integration.md` and `0007-commit-verification.md`).
