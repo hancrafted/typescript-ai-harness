@@ -12,26 +12,19 @@ description: "The config-driven OKF frontmatter floor that owns `type` repo-wide
 
 ## Context
 
-GEN-001 (the [ADR Contract](./GEN-001-adr.md)) deliberately deferred the repo-wide semantics of the `type` frontmatter key to a future ADR — it even orders `type` first in ADR frontmatter "because it is a universal field GEN-002 will own." Until that owner exists, `type` is a key with no contract behind it: every consumer that wants to classify a markdown file falls back to path or prose parsing, GEN-001 has never been proven to govern a second (non-self) ADR, and this repo — whose entire purpose is to ship a governance harness into other projects — has no frontmatter contract to ship.
+**The Problem:** Markdown files (ADRs, skills, PRDs) lack explicit classification, forcing tooling to rely on fragile path or prose parsing.
+**The Solution:** Make type a mandatory, deterministic frontmatter key to enable cheap, scalable machine classification (e.g., nightly cleanup jobs filtering for type: prd) — and to keep the contract portable: its ADR and rules stay byte-identical across repos, with per-project scope declared as data.
 
-Concretely, four pain points drive this decision:
+The floor is grounded on Google's Open Knowledge Format (OKF), where `type` is the sole mandatory field.
 
-1. **No owner for `type`.** Nothing defines what `type` means, what shape it takes, or which values are legal where.
-2. **GEN-001 is undogfooded as a governor of others.** It only validates its own bundle; the contract is unproven against a sibling ADR.
-3. **Nothing portable to ship.** Target projects range from empty greenfield repos to brownfield ones with hundreds of existing markdown files, so any shipped contract must not detonate on install.
-4. **A live naming collision.** This repo runs Matt-Pocock "design ADRs" under `docs/adr/` and archgate "governance ADRs" under `.archgate/adrs/` — sharing the word "ADR" with no machine-readable way to tell them apart.
-
-Alternatives considered: (1) A hand-invented schema — rejected: grounding on Google's Open Knowledge Format (OKF), where `type` is the sole mandatory field, inherits a published spec's authority and forward-compatibility. (2) A mode flag (`allowlist` vs `denylist`) selecting enforcement posture — rejected: it forks the rule engine into two code paths to test and misread; posture is instead made *emergent* from which zones are declared. (3) Folding the config into `.archgate/config.json` — rejected: it pollutes archgate's own config with harness-specific fields. (4) YAML for the manifest — rejected: archgate ships zero runtime dependencies and its rule API is JSON-native (`ctx.readJSON`), so YAML would force a parser dependency into every target project, against [ADR-0001](../../docs/adr/0001-github-git-spec-tsx-distribution.md)'s runtime-dependency firewall.
-
-For this harness, the distinguishing move is that the contract is generic and portable while *what* it governs is **data, not prose**: one root manifest declares an ordered list of zones (path-glob → policy), the ADR and its rules are byte-identical everywhere, and only the manifest differs per project.
+Alternatives considered: a mode flag (`allowlist` vs `denylist`) to select enforcement posture — rejected because posture is instead made *emergent* from which zones a project declares (§3.3); folding the config into `.archgate/config.json` — rejected to keep archgate's own config unpolluted (§2.1); and YAML for the manifest — rejected because archgate ships zero runtime dependencies and its rule API is JSON-native (§2.2).
 
 ## Decision
 
-### 1. Scope and self-hosting
+### 1. Scope
 
 1. This contract owns the repo-wide semantics of `type` and establishes a frontmatter **floor**: the minimum keys every *governed* markdown file MUST carry. It is a floor, not a ceiling — a zone or a tightening ADR MAY require more, never less.
-2. GEN-002 is a governance ADR (`type: adr`) and self-hosts under GEN-001: its own file satisfies every GEN-001 rule, and its `paths:` is intentionally broad (`**/*.md` plus the manifest) so the contract loads into agent context whenever any markdown or the manifest is opened. Runtime-load scope (`paths:`) is deliberately wider than enforcement scope (the manifest zones).
-3. Cross-harness INDEX routing and a global `type`-vocabulary registry are explicitly out of scope, owned by a future index ADR ([#6](https://github.com/hancrafted/typescript-ai-harness/issues/6)) and deferred respectively; membership is enforced per-zone only.
+2. Runtime-load scope is deliberately wider than enforcement scope: the ADR's broad `paths:` loads it into context on any markdown Read, while enforcement applies only to files a manifest zone matches.
 
 ### 2. The root manifest
 
