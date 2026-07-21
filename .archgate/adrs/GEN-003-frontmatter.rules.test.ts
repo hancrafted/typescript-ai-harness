@@ -162,11 +162,23 @@ describe('frontmatter-floor', () => {
     expect(violations.some((v) => /must carry 'name'/.test(v.message))).toBe(true);
   });
 
-  it('fails when description is missing', async () => {
+  it('leaves description optional by default', async () => {
     const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') };
     const { ctx, violations } = makeCtx(files, { manifest: adrRules });
     await floor.check(ctx);
-    expect(violations.some((v) => /missing the required 'description' key/.test(v.message))).toBe(true);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails a missing description when the entry sets requireDescription', async () => {
+    const reqRules = manifest([
+      { match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title', requireDescription: true },
+    ]);
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') };
+    const { ctx, violations } = makeCtx(files, { manifest: reqRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /missing 'description', which the matched entry requires/.test(v.message))).toBe(
+      true,
+    );
   });
 
   it('fails when the label exceeds the default 64-char cap', async () => {
@@ -198,6 +210,46 @@ describe('frontmatter-floor', () => {
     ]);
     const files = { '.claude/agents/s.md': md(`type: agent\nname: "Scarlet"\ndescription: "${long}"`) };
     const { ctx, violations } = makeCtx(files, { manifest: agentRules });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('accepts a valid comma-separated tags list', async () => {
+    const files = {
+      'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: governance, frontmatter-floor'),
+    };
+    const { ctx, violations } = makeCtx(files, { manifest: adrRules });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails a non-kebab tag', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: Governance, ok') };
+    const { ctx, violations } = makeCtx(files, { manifest: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /tag 'Governance' must be kebab-case/.test(v.message))).toBe(true);
+  });
+
+  it('flags a trailing comma as a malformed (empty) tag', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: governance,') };
+    const { ctx, violations } = makeCtx(files, { manifest: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /tag '' must be kebab-case/.test(v.message))).toBe(true);
+  });
+
+  it('fails a tag exceeding the default 30-char cap', async () => {
+    const long = 'x'.repeat(31);
+    const files = { 'docs/adr/a.md': md(`type: design-adr\ntitle: "A"\ntags: ${long}`) };
+    const { ctx, violations } = makeCtx(files, { manifest: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /is 31 chars, exceeding the matched entry's 30-char cap/.test(v.message))).toBe(true);
+  });
+
+  it('passes a long tag when the entry raises maxTag', async () => {
+    const long = 'x'.repeat(31);
+    const tagRules = manifest([{ match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title', maxTag: 64 }]);
+    const files = { 'docs/adr/a.md': md(`type: design-adr\ntitle: "A"\ntags: ${long}`) };
+    const { ctx, violations } = makeCtx(files, { manifest: tagRules });
     await floor.check(ctx);
     expect(violations).toEqual([]);
   });
@@ -266,25 +318,34 @@ describe('frontmatter-floor', () => {
 
   it('emits at the warning tier when the matched entry sets severity: warning', async () => {
     const warnRules = manifest([
-      { match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title', severity: 'warning' },
+      {
+        match: 'docs/adr/*.md',
+        allowedTypes: ['design-adr'],
+        label: 'title',
+        severity: 'warning',
+        requireDescription: true,
+      },
     ]);
-    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') }; // missing description
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') }; // missing required description
     const { ctx, violations, warnings } = makeCtx(files, { manifest: warnRules });
     await floor.check(ctx);
     expect(violations).toEqual([]);
-    expect(warnings.some((w) => /missing the required 'description' key/.test(w.message))).toBe(true);
+    expect(warnings.some((w) => /missing 'description'/.test(w.message))).toBe(true);
   });
 
   it('emits at the error tier by default', async () => {
-    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') }; // missing description
-    const { ctx, violations, warnings } = makeCtx(files, { manifest: adrRules });
+    const reqRules = manifest([
+      { match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title', requireDescription: true },
+    ]);
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"') }; // missing required description
+    const { ctx, violations, warnings } = makeCtx(files, { manifest: reqRules });
     await floor.check(ctx);
     expect(warnings).toEqual([]);
-    expect(violations.some((v) => /missing the required 'description' key/.test(v.message))).toBe(true);
+    expect(violations.some((v) => /missing 'description'/.test(v.message))).toBe(true);
   });
 
   it('governs nothing when a present config declares an empty pathRules array', async () => {
-    const files = { 'README.md': md('type: readme\ntitle: "R"') }; // would fail the default, but config replaces it
+    const files = { 'README.md': md('type: readme\ntitle: "R"') }; // wrong type for the default, but config replaces it
     const { ctx, violations } = makeCtx(files, { manifest: manifest([]) });
     await floor.check(ctx);
     expect(violations).toEqual([]);
@@ -292,7 +353,7 @@ describe('frontmatter-floor', () => {
 
   it('a present config replaces the built-in default outright', async () => {
     // Config governs only docs/adr; README (a default path) is now unmatched and
-    // ungoverned even though it would fail the default (wrong type, no description).
+    // ungoverned even though it would fail the default (wrong type).
     const m = manifest([{ match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title' }]);
     const files = { 'README.md': md('type: readme\ntitle: "R"') };
     const { ctx, violations } = makeCtx(files, { manifest: m });
@@ -309,11 +370,11 @@ describe('frontmatter-floor built-in default (no harness config)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('fails a default-governed ADR that is missing its description', async () => {
+  it('leaves description optional under the built-in default', async () => {
     const files = { '.archgate/adrs/GEN-009-x.md': md('type: adr\ntitle: "X"') };
     const { ctx, violations } = makeCtx(files);
     await floor.check(ctx);
-    expect(violations.some((v) => /missing the required 'description' key/.test(v.message))).toBe(true);
+    expect(violations).toEqual([]);
   });
 
   it('fails a default-governed README whose type is not docs', async () => {

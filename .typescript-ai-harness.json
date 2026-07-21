@@ -6,7 +6,7 @@
       "pathRules": [
         { "match": "docs/adr/*.md", "allowedTypes": ["design-adr"], "label": "title" },
         { "match": "docs/agents/*.md", "allowedTypes": ["agent-doc"], "label": "title" },
-        { "match": ".archgate/adrs/*.md", "allowedTypes": ["adr"], "label": "title" },
+        { "match": ".archgate/adrs/*.md", "allowedTypes": ["adr"], "label": "title", "requireDescription": true },
         { "match": ".claude/agents/*.md", "allowedTypes": ["agent"], "label": "name", "maxDescription": 4096 },
         { "match": "CONTEXT.md", "allowedTypes": ["context"], "label": "title" },
         { "match": "README.md", "allowedTypes": ["docs"], "label": "title" },

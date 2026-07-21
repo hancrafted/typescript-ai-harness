@@ -56,7 +56,7 @@ const configValid = ruleSet.rules['frontmatter-config-valid'];
 describe('frontmatter-config-valid', () => {
   const goodManifest = manifest(
     [
-      { match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title' },
+      { match: 'docs/adr/*.md', allowedTypes: ['design-adr'], label: 'title', requireDescription: true, maxTag: 40 },
       { match: '.claude/agents/*.md', allowedTypes: ['agent'], label: 'name', maxDescription: 4096 },
       { match: '.agents/**', exempt: true },
       { match: ['README.md', 'AGENTS.md'], label: 'title', severity: 'warning' },
@@ -122,6 +122,18 @@ describe('frontmatter-config-valid', () => {
     const { ctx, violations } = makeCtx({ manifest: manifest([{ match: 'x.md', maxLabel: 12.5 }]) });
     await configValid.check(ctx);
     expect(violations.some((v) => /maxLabel must be a positive integer/.test(v.message))).toBe(true);
+  });
+
+  it('fails on a non-boolean requireDescription', async () => {
+    const { ctx, violations } = makeCtx({ manifest: manifest([{ match: 'x.md', requireDescription: 'yes' }]) });
+    await configValid.check(ctx);
+    expect(violations.some((v) => /requireDescription must be a boolean/.test(v.message))).toBe(true);
+  });
+
+  it('fails on a non-positive maxTag', async () => {
+    const { ctx, violations } = makeCtx({ manifest: manifest([{ match: 'x.md', maxTag: 0 }]) });
+    await configValid.check(ctx);
+    expect(violations.some((v) => /maxTag must be a positive integer/.test(v.message))).toBe(true);
   });
 
   it('fails on a non-boolean exempt', async () => {

@@ -3,7 +3,7 @@
 // GEN-002 — Harness Config: guards the shape of the root harness config
 // `.typescript-ai-harness.json`. One rule, `frontmatter-config-valid`, validates
 // the `adr.frontmatter` block — pathRules array, per-entry match / allowedTypes /
-// label / severity / caps, unmatched, draftEscape — so a malformed config
+// label / severity / requireDescription / caps, unmatched, draftEscape — so a malformed config
 // surfaces as an error rather than silently disabling the floor. The rule
 // DECLARES the error tier per GEN-001 §7 and no-ops when the config file or its
 // adr.frontmatter block is absent, so the contract is safe to ship pre-seed. The
@@ -94,6 +94,18 @@ function validatePathRule(ctx: RuleContext, entry: unknown, index: number): void
       file: CONFIG_PATH,
     });
   }
+  if (rule.requireDescription !== undefined && typeof rule.requireDescription !== 'boolean') {
+    ctx.report.violation({
+      message: `Harness config ${where}.requireDescription must be a boolean (GEN-002 [frontmatter-config-valid]).`,
+      file: CONFIG_PATH,
+    });
+  }
+  if (rule.maxTag !== undefined && !isPositiveInt(rule.maxTag)) {
+    ctx.report.violation({
+      message: `Harness config ${where}.maxTag must be a positive integer (GEN-002 [frontmatter-config-valid]).`,
+      file: CONFIG_PATH,
+    });
+  }
   if (rule.maxLabel !== undefined && !isPositiveInt(rule.maxLabel)) {
     ctx.report.violation({
       message: `Harness config ${where}.maxLabel must be a positive integer (GEN-002 [frontmatter-config-valid]).`,
@@ -112,7 +124,7 @@ export default {
   rules: {
     'frontmatter-config-valid': {
       description:
-        "The harness config's adr.frontmatter block is well-formed: pathRules is an array; each entry has a match glob; optional allowedTypes are kebab strings; label is name|title; the entry severity is error|warning; maxLabel/maxDescription are positive integers; unmatched and draftEscape are valid. Guards enforcement integrity — a malformed config surfaces as an error rather than silently disabling the floor. No-ops when the config file or its adr.frontmatter block is absent.",
+        "The harness config's adr.frontmatter block is well-formed: pathRules is an array; each entry has a match glob; optional allowedTypes are kebab strings; label is name|title; the entry severity is error|warning; requireDescription is a boolean; maxLabel/maxDescription/maxTag are positive integers; unmatched and draftEscape are valid. Guards enforcement integrity — a malformed config surfaces as an error rather than silently disabling the floor. No-ops when the config file or its adr.frontmatter block is absent.",
       severity: 'error',
       async check(ctx) {
         const fm = frontmatterConfig(await tryReadJSON(ctx, CONFIG_PATH));

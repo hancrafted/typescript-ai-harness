@@ -3,8 +3,9 @@
 // GEN-003 — Frontmatter Contract: the OKF frontmatter floor that owns `type`
 // repo-wide. One rule, `frontmatter-floor`, resolves every governed markdown
 // file to its pathRules entry (first-match-wins) and enforces the floor there —
-// a kebab-case type, exactly one pinned label (name xor title), and a
-// description. Scope and per-file policy are read from the harness config
+// a kebab-case type, exactly one pinned label (name xor title), an optional
+// description (required when the entry sets requireDescription), and optional
+// comma-separated kebab-case tags. Scope and per-file policy are read from the harness config
 // `.typescript-ai-harness.json` (schema owned by GEN-002); when that config or
 // its `adr.frontmatter` block is absent the built-in DEFAULT_CONFIG below
 // applies. Single evaluation path: `userConfig?.adr?.frontmatter ?? DEFAULT`.
@@ -12,11 +13,12 @@
 // the matched entry's configured tier (default error) through one code path.
 const CONFIG_PATH = '.typescript-ai-harness.json';
 
-// OKF/Agent-Skills default ceilings; a pathRules entry may raise either via
-// maxLabel / maxDescription. `type` is the OKF anchor and is always mandatory in
-// a governed entry.
+// Default ceilings (OKF/Agent-Skills for label and description); a pathRules
+// entry may raise any of them via maxLabel / maxDescription / maxTag. `type` is
+// the OKF anchor and is always mandatory in a governed entry.
 const DEFAULT_MAX_LABEL = 64;
 const DEFAULT_MAX_DESCRIPTION = 1024;
+const DEFAULT_MAX_TAG = 30;
 
 // The tier a matched entry emits at. Written via this constant — never as a
 // `severity:`-prefixed literal — so GEN-001's adr-error-tier scan does not read
@@ -199,10 +201,17 @@ function checkLabel(emit: Emit, file: string, fm: string, label: string | null, 
   checkLabelLength(emit, file, name ?? title, name ? 'name' : 'title', rule);
 }
 
+// `description` is optional by default; an entry opts into requiring it via
+// requireDescription. The cap applies whenever a description is present.
 function checkDescription(emit: Emit, file: string, fm: string, rule: Record<string, unknown>): void {
   const desc = getFrontmatterValue(fm, 'description');
   if (!desc) {
-    emit({ message: `Governed file is missing the required 'description' key (GEN-003 [frontmatter-floor]).`, file });
+    if (rule.requireDescription === true) {
+      emit({
+        message: `Governed file is missing 'description', which the matched entry requires (GEN-003 [frontmatter-floor]).`,
+        file,
+      });
+    }
     return;
   }
   const cap = isPositiveInt(rule.maxDescription) ? (rule.maxDescription as number) : DEFAULT_MAX_DESCRIPTION;
@@ -211,6 +220,30 @@ function checkDescription(emit: Emit, file: string, fm: string, rule: Record<str
       message: `Governed file 'description' is ${desc.length} chars, exceeding the matched entry's ${cap}-char cap (GEN-003 [frontmatter-floor]).`,
       file,
     });
+  }
+}
+
+// `tags`, when present, is a comma-separated list; each tag kebab-case and
+// within the entry's cap. No closed set, no count limit. An empty segment (e.g.
+// a trailing comma) fails the kebab check, flagging the malformed list.
+function checkTags(emit: Emit, file: string, fm: string, rule: Record<string, unknown>): void {
+  const raw = getFrontmatterValue(fm, 'tags');
+  if (!raw) return;
+  const cap = isPositiveInt(rule.maxTag) ? (rule.maxTag as number) : DEFAULT_MAX_TAG;
+  for (const tag of raw.split(',').map((t) => t.trim())) {
+    if (!KEBAB_RE.test(tag)) {
+      emit({
+        message: `Governed file tag '${tag}' must be kebab-case — lowercase alphanumerics joined by single hyphens (GEN-003 [frontmatter-floor]).`,
+        file,
+      });
+      continue;
+    }
+    if (tag.length > cap) {
+      emit({
+        message: `Governed file tag '${tag}' is ${tag.length} chars, exceeding the matched entry's ${cap}-char cap (GEN-003 [frontmatter-floor]).`,
+        file,
+      });
+    }
   }
 }
 
@@ -234,7 +267,7 @@ async function checkFloor(
   const fm = extractFrontmatter(content);
   if (fm === null) {
     emit({
-      message: `Governed file has no YAML frontmatter block — the floor requires type + ${labelDesc(label)} + description (GEN-003 [frontmatter-floor]).`,
+      message: `Governed file has no YAML frontmatter block — the floor requires type + ${labelDesc(label)} (GEN-003 [frontmatter-floor]).`,
       file,
     });
     return;
@@ -242,13 +275,14 @@ async function checkFloor(
   checkType(emit, file, getFrontmatterValue(fm, 'type'), rule, draftEscape);
   checkLabel(emit, file, fm, label, rule);
   checkDescription(emit, file, fm, rule);
+  checkTags(emit, file, fm, rule);
 }
 
 export default {
   rules: {
     'frontmatter-floor': {
       description:
-        "Every governed markdown file, resolved to its pathRules entry first-match-wins (or the built-in default when the harness config is absent), carries the OKF floor — a kebab-case type, exactly the pinned label (name xor title), and a description — each within the entry's caps (default name/title 64, description 1024). Membership is checked against the entry's allowedTypes plus draft when draftEscape is on; an exempt entry or an unmatched file bears no floor. The rule runs the single path userConfig?.adr?.frontmatter ?? DEFAULT and emits at the matched entry's tier (default error) from one code path.",
+        "Every governed markdown file, resolved to its pathRules entry first-match-wins (or the built-in default when the harness config is absent), carries the OKF floor: a kebab-case type (checked against the entry's allowedTypes, plus draft when draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required only when the entry sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry or an unmatched file bears no floor. The rule runs the single path userConfig?.adr?.frontmatter ?? DEFAULT and emits at the matched entry's tier (default error) from one code path.",
       severity: 'error',
       async check(ctx) {
         // Single evaluation path: a present adr.frontmatter block replaces the

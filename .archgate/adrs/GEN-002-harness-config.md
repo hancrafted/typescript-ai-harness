@@ -28,8 +28,8 @@ Alternatives considered: **folding the config into `.archgate/config.json`** —
 
 ### 2. The `adr.frontmatter` schema
 
-1. The `adr.frontmatter` block MUST be well-formed or enforcement integrity is compromised: `pathRules` MUST be an array; each entry MUST carry a `match` glob (a string, or a non-empty array of strings); optional `allowedTypes` MUST be kebab-case strings; `label` MUST be `name` or `title`; an entry's `severity` (its enforcement tier) MUST be `error` or `warning`; `maxLabel`/`maxDescription` MUST be positive integers; `unmatched` MUST be `exempt` and `draftEscape` a boolean. A malformed block surfaces as an error rather than silently disabling the floor. (📜 Rule: `frontmatter-config-valid`)
-2. Each `pathRules` entry is one of three cases: `exempt: true` (floor off for matched files), `allowedTypes: [...]` (floor on, closed membership), or neither (floor on, membership open to any kebab-case `type`). `label` pins the single required label (`name` xor `title`); `maxLabel`/`maxDescription` raise the OKF ceilings (defaults 64 and 1024) for that entry.
+1. The `adr.frontmatter` block MUST be well-formed or enforcement integrity is compromised: `pathRules` MUST be an array; each entry MUST carry a `match` glob (a string, or a non-empty array of strings); optional `allowedTypes` MUST be kebab-case strings; `label` MUST be `name` or `title`; an entry's `severity` (its enforcement tier) MUST be `error` or `warning`; `requireDescription` MUST be a boolean; `maxLabel`/`maxDescription`/`maxTag` MUST be positive integers; `unmatched` MUST be `exempt` and `draftEscape` a boolean. A malformed block surfaces as an error rather than silently disabling the floor. (📜 Rule: `frontmatter-config-valid`)
+2. Each `pathRules` entry is one of three cases: `exempt: true` (floor off for matched files), `allowedTypes: [...]` (floor on, closed membership), or neither (floor on, membership open to any kebab-case `type`). `label` pins the single required label (`name` xor `title`); `requireDescription` makes `description` mandatory for that entry (it is optional by default); `maxLabel`/`maxDescription`/`maxTag` raise the default ceilings (64, 1024 and 30) for that entry.
 
 ### 3. Evaluation
 
@@ -43,7 +43,7 @@ Alternatives considered: **folding the config into `.archgate/config.json`** —
 2. **DO** validate the `adr.frontmatter` block's shape so a malformed config fails loudly instead of silently disabling the floor. (Decision 2, 📜 Rule: `frontmatter-config-valid`)
 3. **DO** order `pathRules` deliberately and rely on first-match-wins — put exempt globs before a catch-all when governing a brownfield surface.
 4. **DO** express enforcement posture through which paths you declare, letting `unmatched: exempt` absorb everything else, rather than reaching for a mode flag.
-5. **DO** raise `maxLabel`/`maxDescription` on a single `pathRules` entry when a file type legitimately needs a longer label or description, leaving the OKF defaults everywhere else.
+5. **DO** tune per-entry policy (`requireDescription`, `maxLabel`/`maxDescription`/`maxTag`) on the single `pathRules` entry that needs it, leaving the defaults everywhere else.
 6. **DO** write the config as JSON — archgate reads it with `ctx.readJSON`, and the toolchain ships no YAML parser.
 
 1. **DON'T** put harness fields in `.archgate/config.json`, or archgate fields in `.typescript-ai-harness.json`.
@@ -88,6 +88,7 @@ Automated: `GEN-002-harness-config.rules.ts` enforces one rule — `frontmatter-
 ## References
 
 - [Frontmatter Contract (GEN-003)](./GEN-003-frontmatter.md) — the `type` semantics and floor that consume this config; the built-in default lives there.
+- [Frontmatter configuration reference](../../docs/agents/frontmatter-config.md) — option-by-option user reference for the `adr.frontmatter` block this schema governs.
 - [ADR Contract (GEN-001)](./GEN-001-adr.md) — the shape and runtime-loading contract this ADR self-hosts under.
 - [Distribution model (ADR-0001)](../../docs/adr/0001-github-git-spec-tsx-distribution.md) — the runtime-dependency firewall that forces JSON over YAML.
 - [archgate integration (ADR-0005)](../../docs/adr/0005-archgate-integration.md) — the integration that will seed and patch the config's `adr` key in target projects.
