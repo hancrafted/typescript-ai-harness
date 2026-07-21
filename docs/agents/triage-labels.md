@@ -1,3 +1,9 @@
+---
+type: agent-doc
+title: "Triage labels"
+description: "Maps the five canonical triage roles used by the skills to the actual label strings in this repo's GitHub issue tracker."
+---
+
 # Triage Labels
 
 The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.

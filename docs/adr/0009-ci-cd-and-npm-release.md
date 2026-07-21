@@ -1,4 +1,7 @@
 ---
+type: design-adr
+title: "CI/CD and npm release"
+description: "Two GitHub Actions workflows — ci.yml on every push/PR and publish.yml on v* tags — build, verify, and publish the bundled dist to npm."
 status: amended 2026-07-21 — token auth replaced by OIDC trusted publishing
 ---
 

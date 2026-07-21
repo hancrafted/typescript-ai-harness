@@ -1,3 +1,9 @@
+---
+type: agent-doc
+title: "Domain docs"
+description: "How the engineering skills should consume this repo's domain documentation (CONTEXT.md and ADRs) when exploring the codebase."
+---
+
 # Domain Docs
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.

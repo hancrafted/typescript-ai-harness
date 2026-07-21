@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "Integration contract"
+description: "Every Integration is a uniform module registered in an explicit static registry, with its config templates co-located alongside its code."
+---
+
 # Integration contract: uniform module + explicit static registry + co-located templates
 
 Each harness capability is an **Integration** — a self-contained module under `src/integrations/<id>/` exposing a uniform contract:

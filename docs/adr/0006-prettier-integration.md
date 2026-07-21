@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "prettier Integration"
+description: "Configure prettier via explicit config values and a mutually-exclusive import-sort strategy so formatting and import order never conflict."
+---
+
 # prettier Integration: config values + mutually-exclusive import-sort strategy
 
 Ship an opinionated `.prettierrc.json`. There was no existing prettier config to copy — the repo's style was inconsistent (`eslint.config.js` used single quotes, `vitest.config.ts` double) — so the config is *defined*, not inherited:

@@ -1,4 +1,7 @@
 ---
+type: design-adr
+title: "GitHub git-spec + tsx distribution"
+description: "Distribute via GitHub git-spec + tsx in development; publish a bundled dist/ to npm for consumers with zero runtime dependency installs."
 status: amended 2026-07-20 — publishing enabled (see ADR-0009)
 ---
 

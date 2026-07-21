@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "archgate Integration"
+description: "Install archgate in a hybrid model: an interactive init for humans and a headless direct-write snapshot for automated runs."
+---
+
 # archgate Integration: hybrid — interactive `init`, headless direct-write snapshot
 
 archgate ships an `init` command but exposes **no non-interactive contract** — there is no `--yes`/`--no-input`, and `--editor <value>` suppresses only the editor prompt. With a TTY attached, `archgate init` opens an interactive session and installs a Claude plugin into the global `~/.claude`; with stdin detached it runs *uncontrolled*, picking defaults and mutating machine-global state. A scaffolder that must run under `--yes` therefore cannot delegate to it.
