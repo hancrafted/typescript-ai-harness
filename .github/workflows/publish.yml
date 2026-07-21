@@ -25,8 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Node 24 ships npm >= 11.5.1, required for trusted publishing (ADR-0009).
+          # Deliberately NO `registry-url`: it makes setup-node write an .npmrc with
+          # `_authToken=${NODE_AUTH_TOKEN}`, and with no token that placeholder line
+          # makes npm skip the OIDC exchange and fail with a misleading 404
+          # (actions/setup-node#1551). Without it, publishing targets the default
+          # registry (registry.npmjs.org) via pure OIDC trusted publishing.
           node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
       - run: npm ci
       - run: npm run verify
       - run: npm run build
