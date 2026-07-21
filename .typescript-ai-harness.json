@@ -1,0 +1,18 @@
+{
+  "adr": {
+    "frontmatter": {
+      "unmatched": "exempt",
+      "draftEscape": true,
+      "zones": [
+        { "match": "docs/adr/*.md", "allowedTypes": ["design-adr"], "label": "title" },
+        { "match": "docs/agents/*.md", "allowedTypes": ["agent-doc"], "label": "title" },
+        { "match": ".archgate/adrs/*.md", "allowedTypes": ["adr"], "label": "title" },
+        { "match": ".claude/agents/*.md", "allowedTypes": ["agent"], "label": "name", "maxDescription": 4096 },
+        { "match": "CONTEXT.md", "allowedTypes": ["context"], "label": "title" },
+        { "match": "README.md", "allowedTypes": ["readme"], "label": "title" },
+        { "match": "AGENTS.md", "allowedTypes": ["agents-md"], "label": "title" },
+        { "match": "CLAUDE.md", "allowedTypes": ["claude-md"], "label": "title" }
+      ]
+    }
+  }
+}

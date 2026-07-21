@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "Self-hosting scaffolder"
+description: "This repo consumes its own harness, so the tool is dogfooded on every run and its output is validated against real use."
+---
+
 # Self-hosting scaffolder: this repo consumes its own harness
 
 The co-located template files (one per Integration, under `src/integrations/<id>/template/` — see ADR-0004) are the single source of truth for the harness. This repo installs and updates its own harness by applying the tool to itself, so the tool is continuously exercised against a real project (itself). Consequently this repo conforms to the harness's own conventions — ESM + tsx (ADR-0001), source under `src/`, tests as `*.test.ts` — rather than the templates bending to this repo.

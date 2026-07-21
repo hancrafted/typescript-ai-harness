@@ -1,4 +1,7 @@
 ---
+type: design-adr
+title: "Inter-Integration dependency resolution"
+description: "How options meaningful only for a combination of selected Integrations (e.g. eslint-config-prettier) are resolved — deferred; today handled imperatively."
 status: proposed
 ---
 

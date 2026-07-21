@@ -1,3 +1,9 @@
+---
+type: context
+title: "Project context"
+description: "Ubiquitous language and ADR/frontmatter governance vocabulary for the AI harness — the domain terms and governance concepts this repo speaks in."
+---
+
 # AI Harness Setup
 
 An interactive CLI that installs and configures external dependencies as a standard dev-tooling **harness** for agentic engineering environments, so each new Node/TypeScript project doesn't re-derive the same boilerplate.

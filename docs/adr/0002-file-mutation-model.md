@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "File mutation model"
+description: "Overwrite tool-owned config files, surgically merge package.json, and offer a dry-run to preview all changes before writing."
+---
+
 # File mutation model: overwrite tool-owned configs, surgical-merge package.json, dry-run to preview
 
 Running the tool applies changes in one pass (write configs → edit `package.json` → install → wire hooks). This repo is the single source of truth, so re-running acts as an **update**: tool-owned config files are **replaced wholesale** with this repo's canonical version, discarding any local edits. `package.json` is the one co-owned file and is never overwritten — it is **surgically merged** (our scripts, `devDependencies`, and `lint-staged` block are set/replaced; everything else is left untouched). A `--dry-run` flag prints every intended write, overwrite, merge, and install without performing them.

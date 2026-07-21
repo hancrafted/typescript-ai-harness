@@ -1,3 +1,9 @@
+---
+type: agents-md
+title: "Agent instructions"
+description: "Canonical agent instructions for this repo — commit conventions, skills, tech stack, and the agent-skill docs index; imported by CLAUDE.md."
+---
+
 # AI Harness Setup
 
 This project provides an interactive CLI Tool to setup basic harness libraries to any projects to reduce the boilerplate code for AI projects.
