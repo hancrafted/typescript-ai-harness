@@ -1,9 +1,10 @@
 name: Publish
 
-# Release pipeline (ADR-0009): a v* tag re-verifies and rebuilds, then publishes
-# to npm with provenance. Releases are cut manually — `npm version <bump>` then
-# `git push --follow-tags` — so publishing is a deliberate, auditable act. A
-# failing verify or build aborts the job before anything reaches npm.
+# Release pipeline (ADR-0009, amended 2026-07-21): a v* tag re-verifies and
+# rebuilds, then publishes to npm via OIDC **trusted publishing** — no token.
+# Releases are cut manually — `npm version <bump>` then `git push --follow-tags`
+# — so publishing is a deliberate, auditable act. A failing verify or build
+# aborts the job before anything reaches npm.
 on:
   push:
     tags:
@@ -15,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Mint the OIDC token npm uses to attach build provenance (ADR-0009).
+      # OIDC token for npm trusted publishing (also drives automatic provenance).
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -23,16 +24,16 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          # Node 24 ships npm >= 11.5.1, required for provenance (ADR-0009).
+          # Node 24 ships npm >= 11.5.1, required for trusted publishing (ADR-0009).
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-          cache: npm
       - run: npm ci
       - run: npm run verify
       - run: npm run build
-      # publishConfig.access is public; prepublishOnly rebuilds as a last guard so
-      # a stale or missing bundle can never ship (US-11, US-23).
-      - run: npm publish --access public --provenance
-        env:
-          # Granular, @hancrafted-scoped, expiring token — rotate before expiry.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Trusted publishing: the npm CLI detects the GitHub Actions OIDC environment
+      # and authenticates with no token; provenance is attached automatically.
+      # Requires a trusted publisher for this package on npmjs.com (this repo +
+      # this workflow filename); OIDC cannot create a new package, so the first
+      # version is published manually (see ADR-0009). prepublishOnly rebuilds as a
+      # last guard so a stale or missing bundle can never ship (US-11, US-23).
+      - run: npm publish --access public
