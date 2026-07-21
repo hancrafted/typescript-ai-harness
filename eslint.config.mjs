@@ -3,7 +3,7 @@ import eslintConfigPrettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.archgate/**'] },
+  { ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.archgate/**', '.claude/worktrees/**'] },
   {
     files: ['**/*.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended, tseslint.configs.stylistic],
