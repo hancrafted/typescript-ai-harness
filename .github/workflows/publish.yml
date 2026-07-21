@@ -25,12 +25,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Node 24 ships npm >= 11.5.1, required for trusted publishing (ADR-0009).
-          # Deliberately NO `registry-url`: it makes setup-node write an .npmrc with
-          # `_authToken=${NODE_AUTH_TOKEN}`, and with no token that placeholder line
-          # makes npm skip the OIDC exchange and fail with a misleading 404
-          # (actions/setup-node#1551). Without it, publishing targets the default
-          # registry (registry.npmjs.org) via pure OIDC trusted publishing.
+          # `registry-url` is required: OIDC only engages when the registry is
+          # explicitly configured. It also makes setup-node write a placeholder
+          # `_authToken` line, which is stripped in the next step (see below).
           node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Enable OIDC trusted publishing
+        # setup-node writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` when
+        # registry-url is set; with no token that placeholder makes npm use token auth
+        # and skip the OIDC exchange (actions/setup-node#1551). Strip only that line so
+        # the explicit registry stays (OIDC needs it) but npm falls through to trusted
+        # publishing. The echo confirms the OIDC env is present without leaking it.
+        run: |
+          sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          echo "OIDC request URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm ci
       - run: npm run verify
       - run: npm run build
