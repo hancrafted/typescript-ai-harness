@@ -1,6 +1,6 @@
 {
-  "name": "typescript-ai-harness",
-  "version": "0.0.1",
+  "name": "@hancrafted/typescript-ai-harness",
+  "version": "0.1.0",
   "description": "Interactive CLI to install and update a standard dev-tooling harness (archgate, eslint, prettier, vitest, husky) in any Node/TypeScript project.",
   "homepage": "https://github.com/hancrafted/typescript-ai-harness#readme",
   "bugs": {
@@ -12,29 +12,34 @@
   },
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
-    "typescript-ai-harness": "bin/typescript-ai-harness.mjs"
+    "typescript-ai-harness": "dist/cli.mjs"
   },
   "files": [
-    "bin",
-    "src"
+    "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "run": "npx tsx bin/typescript-ai-harness.mjs",
     "run:dry": "npx tsx bin/typescript-ai-harness.mjs --dry-run",
+    "build": "tsup",
+    "smoke": "tsx scripts/smoke.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify": "archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run",
     "verify:commit": "lint-staged && archgate check && tsc --noEmit && vitest run",
+    "prepublishOnly": "npm run build",
     "prepare": "husky || true"
   },
-  "dependencies": {
-    "@clack/prompts": "^1.7.0",
-    "tsx": "^4.23.1"
-  },
   "devDependencies": {
+    "@clack/prompts": "^1.7.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.10",
@@ -45,6 +50,8 @@
     "lint-staged": "^17.1.0",
     "prettier": "^3.9.5",
     "prettier-plugin-organize-imports": "^4.3.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.10"

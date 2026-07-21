@@ -1,0 +1,38 @@
+name: Publish
+
+# Release pipeline (ADR-0009): a v* tag re-verifies and rebuilds, then publishes
+# to npm with provenance. Releases are cut manually — `npm version <bump>` then
+# `git push --follow-tags` — so publishing is a deliberate, auditable act. A
+# failing verify or build aborts the job before anything reaches npm.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: verify + build + publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Mint the OIDC token npm uses to attach build provenance (ADR-0009).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 ships npm >= 11.5.1, required for provenance (ADR-0009).
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run build
+      # publishConfig.access is public; prepublishOnly rebuilds as a last guard so
+      # a stale or missing bundle can never ship (US-11, US-23).
+      - run: npm publish --access public --provenance
+        env:
+          # Granular, @hancrafted-scoped, expiring token — rotate before expiry.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
