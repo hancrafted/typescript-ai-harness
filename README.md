@@ -228,8 +228,11 @@ git push --follow-tags            # pushes the commit and the tag -> triggers pu
 ```
 
 The package stays in `0.x` until the CLI surface is deliberately declared stable. Publishing
-authenticates via the `NPM_TOKEN` repository secret — a scoped, expiring token that must be
-rotated before expiry or releases will start failing.
+uses npm **trusted publishing** (OIDC) — no token, nothing to rotate: CI authenticates via
+the workflow's `id-token` and provenance is attached automatically. This requires a one-time
+setup on npmjs.com — configure a trusted publisher for the package (this repo + `publish.yml`)
+— and, because OIDC cannot create a not-yet-published package, a one-time manual publish of a
+`0.0.0` placeholder with interactive 2FA to bootstrap it (see ADR-0009).
 
 ---
 

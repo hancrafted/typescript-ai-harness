@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended 2026-07-21 — token auth replaced by OIDC trusted publishing
 ---
 
 # CI/CD pipeline and npm release process
@@ -19,3 +19,11 @@ Publishing to npm (ADR-0001) requires a build / test / release pipeline. We run 
 - The `NPM_TOKEN` secret is a maintenance item: it is scoped and expiring, so it must be **rotated before expiry** or releases will start failing.
 - The push/PR pipeline builds and boots the bundle but never asserts real filesystem artifacts; the deferred Docker e2e is the only guard that the tool writes correct files end-to-end. Until it exists, that assurance rests on the unit suite (`src/run.test.ts`) plus manual verification.
 - The build/publish plumbing (`tsup`, the workflows, `dist/`) is **repo-local release tooling** and is deliberately **not** part of the harness installed into target projects — preserving the self-hosting boundary of ADR-0003.
+
+## Update — 2026-07-21: token auth replaced by OIDC trusted publishing
+
+The `NPM_TOKEN` decision above is **reversed**. In 2026 npm began restricting tokens that bypass 2FA for direct publishing: an account that requires 2FA to publish can no longer publish with a plain granular token — only one with the now-deprecated, security-flagged "bypass 2FA" option, which npm itself steers away from in favour of trusted publishing. The token model's one advantage here — a hands-off first release — was in practice already blocked by that same policy (the first `v0.1.0` publish 403'd on exactly this), so the trade-off inverted.
+
+`publish.yml` now uses **npm trusted publishing (OIDC)**: no `NODE_AUTH_TOKEN`, and **no standing secret to rotate** (superseding the rotation consequence above). The npm CLI (≥ 11.5.1, from Node 24) detects the GitHub Actions OIDC environment through the existing `id-token: write` permission and authenticates directly; **provenance is attached automatically**, so the supply-chain badge is retained without the `--provenance` flag. A one-time setup on npmjs.com is required: configure a **trusted publisher** for the package (this repo + the `publish.yml` filename), set the package to "require two-factor authentication and disallow tokens", and delete the `NPM_TOKEN` repository secret.
+
+**First-publish caveat:** OIDC cannot create a package that does not yet exist ([npm/cli#8544](https://github.com/npm/cli/issues/8544)), because a trusted publisher is configured on the package's own settings page. The package is therefore bootstrapped by a one-time **manual** publish of a `0.0.0` placeholder using interactive 2FA (an OTP prompt, not a token); CI then cuts `0.1.0` — and every later release — via OIDC with provenance. This manual bootstrap is the only hands-on step and uses no token.
