@@ -1,5 +1,5 @@
 ---
-type: readme
+type: docs
 title: "typescript-ai-harness"
 description: "Project README — what the harness installs, how to run the CLI, and how the Integrations and governance fit together."
 ---

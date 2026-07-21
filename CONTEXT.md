@@ -55,12 +55,16 @@ _Avoid_: `files` (the retired field name), scope globs
 ## Frontmatter governance
 
 **Frontmatter floor**:
-The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title` + `description`. A floor, not a ceiling — a Zone may require more, never less. Owned by `GEN-002-frontmatter`.
+The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title` + `description`. A floor, not a ceiling — a pathRules entry may require more, never less. Owned by `GEN-003-frontmatter`.
 _Avoid_: frontmatter schema, header, metadata block
 
-**Zone**:
-A path-glob region of the repo carrying one frontmatter policy: either *exempt* (no floor) or *governed* (floor required, plus an optional closed `allowedTypes` set). Zones are declared and ordered in the frontmatter config; a file matching no Zone is exempt by default. Posture (allowlist vs denylist) is emergent from which Zones are declared, not a mode flag.
-_Avoid_: scope, surface, path rule
+**pathRules entry**:
+A path-glob region of the repo carrying one frontmatter policy: either *exempt* (no floor) or *governed* (floor required, plus an optional closed `allowedTypes` set). Entries are declared and ordered under `adr.frontmatter.pathRules` in the harness config and evaluated first-match-wins; a file matching no entry is exempt by default. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
+_Avoid_: Zone (retired name), scope, surface
+
+**Harness config**:
+The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. Frontmatter governance lives under its `adr.frontmatter` key (pathRules, `unmatched`, `draftEscape`). When absent, `GEN-003-frontmatter`'s built-in default applies. The file and its schema are owned by `GEN-002-harness-config`.
+_Avoid_: manifest (retired name), frontmatter config file
 
 **Design ADR**:
 A prose decision record under `docs/adr/` (`type: design-adr`) authored via the Matt-Pocock `/domain-modeling` skill — the lightweight *why*. Distinct from a Governance ADR; the two coexist and are disambiguated by `type`, never by prose.
