@@ -7,3 +7,6 @@ dist/
 .archgate/rules.d.ts
 
 .tokensave
+
+# Local InstructionsLoaded hook audit log (.claude/settings.local.json)
+.claude/instructions-loaded.jsonl

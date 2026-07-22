@@ -94,6 +94,10 @@ _Avoid_: ADR (ambiguous — always qualify design vs governance)
 An archgate ADR under `.archgate/adrs/` (`type: adr`) with an executable `*.rules.ts` companion — the deterministic enforcement layer, governed by the ADR Contract (`GEN-001-adr`). Distinct from a Design ADR.
 _Avoid_: meta-ADR; bare "ADR" (ambiguous — always qualify)
 
+**Core governance bundle** ("core"):
+The foundational system-governance ADR set — GEN-001 through GEN-009 (GEN-001–003 exist; GEN-004–009 reserved/WIP) — installed *intrinsically* by the archgate Integration with no sub-option prompt. A **Tool-owned** set: every file is fully overwritten on each run (each ADR's `.md` + `.rules.ts` + `.rules.test.ts`, plus the supporting type/fixture files and `.claude/rules` symlinks). Distinct from the Harness config (`.typescript-ai-harness.json`), which rides along Seeded (write-once). A future sub-option list holds *optional* bundles; core is never in it.
+_Avoid_: core ADRs (ambiguous), foundational pack, general governance
+
 ## Evals
 
 **Eval harness layer**:

@@ -18,7 +18,11 @@
         { "include": ["CONTEXT.md"], "rule": { "allowedTypes": ["context"], "label": "title" } },
         { "include": ["README.md"], "rule": { "allowedTypes": ["docs"], "label": "title" } },
         { "include": ["AGENTS.md"], "rule": { "allowedTypes": ["agents-md"], "label": "title" } },
-        { "include": ["CLAUDE.md"], "rule": { "allowedTypes": ["claude-md"], "label": "title" } }
+        { "include": ["CLAUDE.md"], "rule": { "allowedTypes": ["claude-md"], "label": "title" } },
+        {
+          "include": [".archgate/INDEX.md"],
+          "rule": { "allowedTypes": ["index"], "label": "title", "requireDescription": true }
+        }
       ]
     }
   }

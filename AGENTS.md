@@ -4,9 +4,23 @@ title: "Agent instructions"
 description: "Canonical agent instructions for this repo — commit conventions, skills, tech stack, and the agent-skill docs index; imported by CLAUDE.md."
 ---
 
-# AI Harness Setup
+# Typescript AI Harness
 
 This project provides an interactive CLI Tool to setup basic harness libraries to any projects to reduce the boilerplate code for AI projects.
+The core workflow 
+
+1. develop, test and verify harness layers in this repo
+2. add to cli as template or assets
+3. dogfood the cli in this repo
+4. repeat 1 until the next harness version is ready to be released
+5. release via v*.*.* tags on github, which will publish to npm @hancrafted/typescript-ai-harness 
+
+
+## Antigravity CLI
+<claude>Skip this section</claude>
+
+1. Read [Scarlet](.claude/agents/scarlet.md) and [Scarlet Memory](.claude/agent-memory/scarlet/MEMORY.md), this are your agent profile and memory. You are allowed to write memory but must append [by Gemini].
+2. Read [ADR INDEX](.archgate/INDEX.md), decide when you should load respetive ADR, when you read or write files matching it's `Trigger`.
 
 ## Rules
 
@@ -29,7 +43,6 @@ doc(README): align root README.md with the agent skills documentation
 ## Skills
 
 This project uses workflow and skills proposed by [Matt Pocock](https://github.com/mattpocock/skills).
-
 
 ## Tech Stack
 
