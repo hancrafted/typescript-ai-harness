@@ -1,3 +1,9 @@
+---
+type: design-adr
+title: "Commit verification"
+description: "Verify full-repo correctness on every commit; staged-file scoping is used only for autofix, never to narrow the correctness gate."
+---
+
 # Commit verification: full-repo correctness on every commit; staged-scoping only for autofix
 
 Clean git history is a first-class citizen — it serves as project memory / audit trail — and the primary committer is an AI. So the pre-commit gate enforces that **every commit is provably green, deterministically in the hook**, not via soft AI instruction (consistent with archgate's deterministic-governance ethos). The gate is split by *kind of operation*, not by scope:

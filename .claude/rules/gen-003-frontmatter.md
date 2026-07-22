@@ -1,0 +1,1 @@
+../../.archgate/adrs/GEN-003-frontmatter.md

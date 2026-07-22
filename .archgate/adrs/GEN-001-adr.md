@@ -24,13 +24,13 @@ Alternatives considered: (1) A generator that copies each ADR body into `.claude
 
 1. This contract governs every ADR markdown and rules.ts file under `.archgate/adrs/` whose basename matches `<PREFIX>-<NNN>-<slug>.{md,ts}`.
 2. GEN-001 is self-hosting: its own file and companion `.rules.ts` satisfy every rule below, and its `paths:` spans the whole bundle (`.md`, `.rules.ts`, tests), so the contract loads whichever piece an agent opens.
-3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are explicitly out of scope — owned by `GEN-002-frontmatter` and a future index ADR respectively.
+3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are explicitly out of scope — owned by `GEN-003-frontmatter` and a future index ADR respectively.
 4. `.archgate/adrs/` is flat and fully governed: every non-hidden file under it (recursively) MUST be a top-level `<PREFIX>-<NNN>-<slug>` `.md`, `.rules.ts`, or `.rules.test.ts`, and every rules/test file MUST have its backing `.md`. archgate discovers ADRs by frontmatter, not filename — a misnamed or nested file may still act as governance while this contract cannot see it, and an ADR-less `.rules.ts` is silently inert. (📜 Rule: `adr-governed-files`)
 
 ### 2. Frontmatter contract (📜 Rule: `adr-frontmatter`)
 
 1. Keys `type`, `id`, `title`, `domain`, `rules` MUST be present and non-empty; `paths` is optional.
-2. Field order MUST be exactly `type → id → title → domain → rules → paths`. `type` leads because it is a universal field GEN-002 will own; additional keys (e.g. `description`) MAY follow `paths`.
+2. Field order MUST be exactly `type → id → title → domain → rules → paths`. `type` leads because it is a universal field GEN-003 will own; additional keys (e.g. `description`) MAY follow `paths`.
 3. `type` MUST be `adr`.
 4. `id` MUST match the filename prefix (`GEN-001-adr.md` carries `id: GEN-001`).
 5. `domain` MUST be a registered archgate domain (built-in or `.archgate/config.json` custom).
@@ -80,7 +80,7 @@ Every ADR MUST carry all six canonical H2 headings (exact text, presence-only, f
 10. **DO** embed the provenance tag `(<ID> [<rule-key>])` in every rule's report messages. (Decision 6, 📜 Rule: `adr-message-provenance`)
 11. **DO** run every companion rule at the `error` tier — §7 permits no other. (Decision 7, 📜 Rule: `adr-error-tier`)
 
-1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-002's, INDEX routing is the index ADR's.
+1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-003's, INDEX routing is the index ADR's.
 2. **DON'T** leave a `.claude/rules` ADR entry behind when its backing ADR is deleted or drops its `paths:` — remove the symlink in the same change.
 3. **DON'T** flip the enforcement tier or add new rules outside an explicit ADR amendment.
 4. **DON'T** author `paths:` as a YAML block-style list — inline flow form only. (Decision 2, 📜 Rule: `adr-paths-inline`)

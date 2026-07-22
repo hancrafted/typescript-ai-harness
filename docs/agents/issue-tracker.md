@@ -1,3 +1,9 @@
+---
+type: agent-doc
+title: "Issue tracker: GitHub"
+description: "How issues and PRDs live as GitHub issues for this repo, and the gh CLI conventions the skills use to operate on them."
+---
+
 # Issue tracker: GitHub
 
 Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
