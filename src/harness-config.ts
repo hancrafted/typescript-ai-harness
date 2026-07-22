@@ -56,8 +56,8 @@ const isCoreList = (value: unknown): value is string[] => isPathList(value) && v
 /**
  * Validate an untrusted parse of the build config into a {@link HarnessConfig},
  * throwing a pinpointed error on any malformed field. Kept a pure function
- * (separate from the module-load read below) so it is unit-coverable and reusable
- * by the capture step, which parses the same file off disk.
+ * (separate from the module-load read below) so it is unit-coverable in isolation
+ * and could validate a config parsed from any source, not only the baked import.
  */
 export function parseHarnessConfig(raw: unknown): HarnessConfig {
   if (!isConfigObject(raw)) {

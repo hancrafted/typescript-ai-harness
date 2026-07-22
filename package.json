@@ -19,7 +19,8 @@
     "typescript-ai-harness": "dist/cli.mjs"
   },
   "files": [
-    "dist"
+    "dist",
+    "assets"
   ],
   "publishConfig": {
     "access": "public"
@@ -28,6 +29,7 @@
     "run": "npx tsx bin/typescript-ai-harness.mjs",
     "run:dry": "npx tsx bin/typescript-ai-harness.mjs --dry-run",
     "build": "tsup",
+    "capture": "tsx scripts/capture.ts",
     "smoke": "tsx scripts/smoke.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -35,6 +37,7 @@
     "format:check": "prettier --check .",
     "verify": "archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run",
     "verify:commit": "lint-staged && archgate check && tsc --noEmit && vitest run",
+    "prepack": "npm run capture",
     "prepublishOnly": "npm run build",
     "prepare": "husky || true"
   },

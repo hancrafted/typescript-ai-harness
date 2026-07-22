@@ -35,6 +35,18 @@ jobs:
       - run: npm ci
       # archgate check + eslint + prettier + tsc + vitest (ADR-0007).
       - run: npm run verify
+      # The committed Core bundle asset must equal its canonical source in
+      # .archgate/ (ADR-0010 §1): re-capture and fail on any drift — a modified,
+      # added, or removed file — so a released bundle can never lag the ADRs.
+      - name: Core bundle asset is fresh
+        run: |
+          npm run capture
+          if [ -n "$(git status --porcelain -- assets)" ]; then
+            echo "::error::Core bundle asset is stale — run 'npm run capture' and commit assets/."
+            git status --porcelain -- assets
+            git --no-pager diff -- assets
+            exit 1
+          fi
       # Build the single-file bundle, then boot-smoke the *published artifact* —
       # catches a bundling break (bad entry, dropped import, broken shebang) that
       # source-level tests cannot (ADR-0009).
