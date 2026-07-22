@@ -81,11 +81,14 @@ describe('harness.config.json — the baked build config', () => {
 });
 
 describe('harness.config.json — publish surface', () => {
-  it('is excluded from the published package (files whitelist ships only dist)', () => {
+  it('is excluded from the published package (the files whitelist ships dist + the captured asset)', () => {
+    // The build config is metadata: consumed by the capture step and baked into
+    // dist, never shipped as a file. The whitelist ships the built bundle (dist)
+    // and the captured Core bundle asset (assets, #47) — and nothing else.
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
       files: string[];
     };
-    expect(pkg.files).toEqual(['dist']);
+    expect(pkg.files).toEqual(['dist', 'assets']);
     expect(pkg.files).not.toContain('harness.config.json');
   });
 });

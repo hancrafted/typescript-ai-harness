@@ -64,12 +64,19 @@ jobs:
       # likely to fail on a WIP push.
       - name: archgate
         run: npx archgate check
-      # NOTE (capture-freshness guard, US-16 / ADR-0010): once the Core-bundle
-      # capture mechanism lands (harness.config.json + capture script, #47/#50),
-      # its clean-diff guard slots in HERE as its own named step — re-run the
-      # capture and `git diff --exit-code` so a stale Bundle asset fails legibly,
-      # after source is validated but before build. It is intentionally absent
-      # until that mechanism exists, so CI does not run a script that is not here.
+      # The committed Core bundle asset must equal its canonical source in
+      # .archgate/ (ADR-0010 §1): re-capture and fail on any drift — a modified,
+      # added, or removed file — so a released bundle can never lag the ADRs.
+      # Realizes the US-16 capture-freshness guard that main reserved a slot for.
+      - name: Core bundle asset is fresh
+        run: |
+          npm run capture
+          if [ -n "$(git status --porcelain -- assets)" ]; then
+            echo "::error::Core bundle asset is stale — run 'npm run capture' and commit assets/."
+            git status --porcelain -- assets
+            git --no-pager diff -- assets
+            exit 1
+          fi
       # Build the single-file bundle, then boot-smoke the *published artifact* —
       # catches a bundling break (bad entry, dropped import, broken shebang) that
       # source-level tests cannot (ADR-0009).
