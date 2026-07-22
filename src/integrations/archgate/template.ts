@@ -1,19 +1,22 @@
+import { ARCHGATE_VERSION } from '../../harness-config';
+
 /**
  * The `archgate init --editor claude` snapshot, captured against the pinned
  * version (ADR-0005). archgate exposes no non-interactive `init`, so rather than
  * shell out we emit this surface directly — a `--yes` run then stays headless
  * and controlled. When bumping the pin, re-capture the snapshot and change
- * {@link ARCHGATE_VERSION} in one place.
+ * `ARCHGATE_VERSION` in `harness.config.json` (its single source — the Harness
+ * build config, ADR-0010 §2).
  */
 
 /**
- * Single greppable version pin. The snapshot below is coupled to this archgate
- * version, so the Dependency is pinned rather than installed latest (a
- * deliberate deviation from the "install latest" convention — ADR-0005).
- * Bumping this is the one-line change that re-versions the coupling; the
- * deferred drift test (#4) reuses it to diff against real `archgate init`.
+ * The pinned archgate version, re-exported from the Harness build config so the
+ * snapshot has a named coupling point. The Dependency is pinned rather than
+ * installed latest (a deliberate deviation from the "install latest" convention
+ * — ADR-0005); the deferred drift test (#4) reuses it to diff against real
+ * `archgate init`.
  */
-export const ARCHGATE_VERSION = '^0.50.0';
+export { ARCHGATE_VERSION };
 
 /** `npm install --save-dev` spec for the pinned archgate Dependency. */
 export const ARCHGATE_DEP = `archgate@${ARCHGATE_VERSION}`;
