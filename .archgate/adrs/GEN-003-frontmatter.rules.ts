@@ -379,9 +379,35 @@ function checkDescription(emit: Emit, file: string, fm: string, rule: Record<str
 }
 
 // `tags`, when present, is a comma-separated list; each tag kebab-case and
-// within the entry's cap. No closed set, no count limit. An empty segment (e.g.
-// a trailing comma) fails the kebab check, flagging the malformed list.
+// within the entry's cap. Must be a single-line comma-separated string, not a
+// YAML list format (block list or inline array). No closed set, no count limit.
 function checkTags(emit: Emit, file: string, fm: string, rule: Record<string, unknown>): void {
+  const tagsMatch = fm.match(/^tags[ \t]*:(.*)$/m);
+  if (!tagsMatch) return;
+
+  const afterKey = tagsMatch[1].trim();
+
+  // Check if tags is formatted as a YAML list/array:
+  // 1. Inline array or list item on the same line: tags: [a, b] or tags: - a
+  // 2. Block list on subsequent lines: tags:\n  - a
+  const index = tagsMatch.index!;
+  const restOfFm = fm.slice(index);
+  const nextKeyMatch = restOfFm.slice(tagsMatch[0].length).match(/\r?\n[a-zA-Z0-9_-]+[ \t]*:/);
+  const tagsSection = nextKeyMatch ? restOfFm.slice(0, tagsMatch[0].length + nextKeyMatch.index!) : restOfFm;
+
+  const isList =
+    afterKey.startsWith('[') ||
+    afterKey.startsWith('-') ||
+    /^\r?\n[ \t]*-[ \t]+/m.test(tagsSection.slice(tagsMatch[0].length));
+
+  if (isList) {
+    emit({
+      message: `Governed file 'tags' must be a comma-separated string, not a YAML list (GEN-003 [frontmatter-floor]).`,
+      file,
+    });
+    return;
+  }
+
   const raw = getFrontmatterValue(fm, 'tags');
   if (!raw) return;
   const cap = isPositiveInt(rule.maxTag) ? (rule.maxTag as number) : DEFAULT_MAX_TAG;

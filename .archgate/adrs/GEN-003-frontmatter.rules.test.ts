@@ -381,6 +381,22 @@ describe('frontmatter-floor', () => {
     expect(violations).toEqual([]);
   });
 
+  it('fails when tags is formatted as a YAML block list', async () => {
+    const files = {
+      'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags:\n   - governance\n   - frontmatter-floor'),
+    };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /must be a comma-separated string, not a YAML list/.test(v.message))).toBe(true);
+  });
+
+  it('fails when tags is formatted as a YAML inline array', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [governance, frontmatter-floor]') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /must be a comma-separated string, not a YAML list/.test(v.message))).toBe(true);
+  });
+
   it('in an open governed entry (no rule payload), fails when neither name nor title is present', async () => {
     const openRules = harnessConfig([{ include: ['docs/adr/*.md'] }]);
     const files = { 'docs/adr/a.md': md('type: design-adr\ndescription: "Why."') };
