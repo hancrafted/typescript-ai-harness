@@ -1,19 +1,19 @@
 ---
 type: agent-doc
 title: "Frontmatter configuration reference"
-description: "Option-by-option reference for the markdown.frontmatter block of .typescript-ai-harness.json: the generic spine (version, FileSet include/exclude, pathRules, exempt, severity, unmatched, coverage), the frontmatter rule payload and settings, and the built-in default."
+description: "Option-by-option reference for the markdown.frontmatter block of .typescript-ai-harness.json: the envelope (top-level version, fence-declared blocks), the generic spine (FileSet include/exclude, pathRules, exempt, severity, unmatched, coverage), the frontmatter rule payload and settings, and the built-in default."
 ---
 
 # Frontmatter configuration reference
 
-The frontmatter floor (GEN-003) reads its policy from the `markdown.frontmatter` block of `.typescript-ai-harness.json` at the repo root. GEN-002 owns the file's envelope and the generic **spine** every block satisfies; GEN-003 owns this block's vocabulary — the `rule` payloads and `settings`. This is the complete option reference — the ADRs carry the contracts, this doc carries the how-to.
+The frontmatter floor (GEN-003) reads its policy from the `markdown.frontmatter` block of `.typescript-ai-harness.json` at the repo root. GEN-002 owns the file's envelope and the generic **spine** every block satisfies; GEN-003 owns this block — its registering fence and its vocabulary (the `rule` payloads and `settings`). This is the complete option reference — the ADRs carry the contracts, this doc carries the how-to.
 
 ## File shape
 
 ```json
 {
+  "version": "0.1.0",
   "markdown": {
-    "version": 1,
     "frontmatter": {
       "unmatched": "exempt",
       "settings": { "draftEscape": true },
@@ -23,16 +23,16 @@ The frontmatter floor (GEN-003) reads its policy from the `markdown.frontmatter`
 }
 ```
 
-- `markdown` is the namespace for markdown-governance blocks; `frontmatter` is currently the only registered block. Unregistered keys under `markdown` are errors — a typo cannot silently disable governance.
-- `markdown.version` (required) stamps the config format. Current version: `1`. A mismatch errors and names the migrate step — the config is never reinterpreted under different semantics.
-- The file is **seeded, never patched**: the CLI writes `markdown` once at install and never touches it on re-run; format upgrades are an explicit interactive migrate (diff + version bump).
-- Top-level keys beside `markdown` are yours — project-local config lives there, never inside `markdown`.
+- `version` (required, top level) — a semver string exactly matching the installed harness release (`package.json` `.version`). A mismatch errors and names the migrate step — the config is never reinterpreted under another release's semantics. Semver-range compatibility arrives with the migrate step (#11).
+- The config is exactly two key levels deep: `{ version, [namespace]: { [block]: … } }`. `markdown` is the namespace for markdown-governance blocks; `frontmatter` is currently the only block. A `namespace.block` key is legal only if a fence in `.archgate/harness-config-extension.d.ts` declares it — a typo cannot silently disable governance.
+- The file is **seeded, never patched**: the CLI writes it once at install and never touches it on re-run; upgrades are an explicit interactive migrate (diff + version restamp).
+- Project-local governance gets its own fence in the extension file (plus a project-local ADR) — there are no free-floating top-level keys.
 
 ## Resolution model
 
 - Config file absent, or a healthy file without the `frontmatter` block → the **built-in default** (below) applies.
 - Block present → it **replaces** the default entirely — never merges. Re-declare every path you want governed.
-- Config present but unparseable, wrong `version`, or the block invalid in any way → the block governs **nothing** until the loudly-reported errors are fixed (all-or-nothing; there is no best-effort mode).
+- Config present but unparseable, `version` missing or not matching the installed harness release, or the block invalid in any way → the block governs **nothing** until the loudly-reported errors are fixed (all-or-nothing; there is no best-effort mode).
 - An entry's files are `glob(include) − glob(exclude)`. Every markdown file is tested against `pathRules` in order; the **first** entry whose file set contains it **claims** it (first-match-wins). Later entries never see it.
 - A file claimed by an `exempt` entry, or matching no entry at all, has no frontmatter requirements (with `unmatched: "exempt"`).
 
@@ -92,8 +92,8 @@ Greenfield allowlist — govern only what you declare; everything else is exempt
 
 ```json
 {
+  "version": "0.1.0",
   "markdown": {
-    "version": 1,
     "frontmatter": {
       "unmatched": "exempt",
       "pathRules": [
@@ -112,8 +112,8 @@ Brownfield ratchet — carve out legacy paths first, then govern the rest withou
 
 ```json
 {
+  "version": "0.1.0",
   "markdown": {
-    "version": 1,
     "frontmatter": {
       "pathRules": [
         { "include": ["docs/legacy/**"], "exempt": true },
@@ -128,8 +128,8 @@ Strict coverage — every markdown file under `docs/` must be explicitly governe
 
 ```json
 {
+  "version": "0.1.0",
   "markdown": {
-    "version": 1,
     "frontmatter": {
       "unmatched": "error",
       "coverage": { "include": ["docs/**/*.md"], "exclude": ["docs/vendor/**"] },
@@ -153,8 +153,8 @@ Applies only when the config file — or the `markdown.frontmatter` block in a h
 
 ## Validation
 
-`archgate check` gates the file in layers: GEN-002's `config-json-parses` (the file parses), `config-namespace-registered` (version stamp, registered blocks, retired-key tombstones) and `config-spine-valid` (the generic spine above); GEN-003's `frontmatter-config-valid` (the `rule`/`settings` vocabulary) and `frontmatter-floor` (the floor itself, plus coverage under `unmatched: "error"`). A broken config fails loudly and governs nothing — never silently.
+`archgate check` gates the file in layers: GEN-002's `config-json-parses` (the file parses), `config-extension-fenced` (the extension's fences are well-formed — the block registry), `config-version` (the stamp matches the installed harness release) and `config-shape-valid` (two-level shape, fence-declared keys, the generic spine above); GEN-003's `frontmatter-config-valid` (the `rule`/`settings` vocabulary) and `frontmatter-floor` (the floor itself, plus coverage under `unmatched: "error"`). A broken config fails loudly and governs nothing — never silently.
 
 ## Hand-editing with types
 
-`.archgate/harness-config.d.ts` carries the `Harness.Config` ambient types for this file — editors and rules files share them via triple-slash reference. It is hand-authored and committed; the generated `rules.d.ts` never carries config types.
+Two hand-authored, committed files carry the `Harness` ambient types for this config. `.archgate/harness-config-core.d.ts` (GEN-002's) holds the generic spine and the envelope; `.archgate/harness-config-extension.d.ts` holds each block's types inside its owning ADR's fence — GEN-003's fence declares `markdown.frontmatter`. To add a new block: add a fence (`// <ADR-ID>-START: <namespace.block>` … `// <ADR-ID>-END`) with the block's types and a `Config` declaration-merge, plus an owning ADR. The generated `rules.d.ts` never carries config types.

@@ -63,12 +63,16 @@ One ordered element of a Config block's `pathRules`, claiming a FileSet of files
 _Avoid_: Zone (retired name), scope, surface
 
 **Harness config**:
-The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. A Seeded config file: written once at install, never patched on re-run; format upgrades are an explicit migrate step guarded by the `markdown.version` stamp. Markdown governance lives under the `markdown` namespace as registered Config blocks. The envelope and Spine are owned by `GEN-002-harness-config`; each block's payload by its owning ADR.
+The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. A Seeded config file: written once at install, never patched on re-run; upgrades are an explicit migrate step guarded by the top-level `version` stamp — a semver string that must exactly match the installed harness release. The shape is exactly two key levels: `version` plus namespaces (e.g. `markdown`) holding Config blocks. The envelope and Spine are owned by `GEN-002-harness-config`; each block's registration and payload by its owning ADR.
 _Avoid_: manifest (retired name), frontmatter config file
 
 **Config block**:
-One registered key under the harness config's `markdown` namespace (currently only `frontmatter`), owned *wholesale* by a single governance ADR: payload schema, validation, interpretation, and built-in default. GEN-002 keeps the registry closed — an unregistered block name is an error, never a silent fallback.
+One `namespace.block` key of the harness config (currently only `markdown.frontmatter`), owned *wholesale* by a single governance ADR: its Config extension fence, payload schema, validation, interpretation, and built-in default. The set of legal block keys is closed — it is the union of fence-declared paths, so an undeclared block name is an error, never a silent fallback — yet GEN-002 hardcodes no name.
 _Avoid_: section, module, plugin
+
+**Config extension fence**:
+A marker-delimited region of the config extension types file, `// <ADR-ID>-START: <namespace.block>` … `// <ADR-ID>-END`, where one block ADR registers its Config block and carries its types. GEN-002 owns the fence *grammar* (balance, unique well-formed paths); the block ADR owns the fence *contents*. Adding a block means adding a fence plus an owning ADR — GEN-002 is never amended.
+_Avoid_: registry entry, marker block, region
 
 **Spine**:
 The generic, domain-blind grammar every path-scoped Config block satisfies, owned by GEN-002: `pathRules` (FileSet entries with `exempt`/`severity`/`rule`), `unmatched` (`exempt` or `error`), `coverage` (required iff `unmatched: error`), and `settings`. The Spine never inspects inside `rule` or `settings` — those are block-owned payload.
