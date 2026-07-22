@@ -73,3 +73,13 @@ _Avoid_: ADR (ambiguous — always qualify design vs governance)
 **Governance ADR**:
 An archgate ADR under `.archgate/adrs/` (`type: adr`) with an executable `*.rules.ts` companion — the deterministic enforcement layer, governed by the ADR Contract (`GEN-001-adr`). Distinct from a Design ADR.
 _Avoid_: meta-ADR; bare "ADR" (ambiguous — always qualify)
+
+## Evals
+
+**Eval harness layer**:
+The capability that measures whether Context artifacts do their job — steering LLMs as intended — rather than merely conforming in shape. Run locally on this repo first (starting with the Governance ADRs), and destined to become an Integration promoted through the CLI. Complements archgate: linting checks an artifact's *shape*, evals exercise its *behaviour* (does a model comply; is the artifact clear) — which linting cannot see.
+_Avoid_: eval integration (premature — not yet an Integration), test suite, LLM tests
+
+**Context artifact**:
+An LLM-consumed, low-churn, authored-to-steer markdown file — a Governance ADR, a skill, or AGENTS.md (more to come). Three defining traits: consumed as model context, written to steer model behaviour, and changed only to correct drift or track a model change (not per-feature). The class the Eval harness layer targets.
+_Avoid_: prompt, doc, governed file (broader — not limited to markdown)
