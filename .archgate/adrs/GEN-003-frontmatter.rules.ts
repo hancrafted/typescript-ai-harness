@@ -1,5 +1,5 @@
 /// <reference path="../rules.d.ts" />
-/// <reference path="../harness-config.d.ts" />
+/// <reference path="../harness-config-extension.d.ts" />
 
 // GEN-003 — Frontmatter Contract: the OKF frontmatter floor that owns `type`
 // repo-wide, and the owner of the `markdown.frontmatter` block of the harness
@@ -18,16 +18,21 @@
 //     entry claims is a violation.
 // Consumer contract (all-or-nothing, GEN-002 §3): config file absent, or a
 // healthy file without the block → the built-in DEFAULT_CONFIG below; file
-// present but unparseable, format-version skew, or a spine-/payload-invalid
-// block → the block governs NOTHING (GEN-002's rules and
-// frontmatter-config-valid are the loud gate; best-effort would enforce wrong
-// policy). Both rules DECLARE the error tier per GEN-001 §7; the floor emits
-// per-file reports at the matched entry's configured tier (default error).
+// present but unparseable, version skew against the installed harness release,
+// or a spine-/payload-invalid block → the block governs NOTHING (GEN-002's
+// rules and frontmatter-config-valid are the loud gate; best-effort would
+// enforce wrong policy). This ADR also owns its fence in
+// .archgate/harness-config-extension.d.ts — the `markdown.frontmatter`
+// declaration GEN-002's shape rule reads as this block's registration. Both
+// rules DECLARE the error tier per GEN-001 §7; the floor emits per-file
+// reports at the matched entry's configured tier (default error).
 const CONFIG_PATH = '.typescript-ai-harness.json';
-// Deliberate copy of GEN-002's constant (rules files cannot share runtime
-// code): a config stamped for another format is never interpreted with this
-// file's v1 semantics. The shared conformance fixtures are the drift tripwire.
-const CURRENT_FORMAT_VERSION = 1;
+// Deliberate copy of GEN-002's version probe (rules files cannot share runtime
+// code): the config's top-level `version` must equal the installed harness
+// release in package.json, or this consumer refuses to interpret the file —
+// a config authored for another release is never read with this one's
+// semantics. The shared conformance fixtures are the drift tripwire.
+const PACKAGE_JSON = 'package.json';
 
 // Default ceilings (OKF/Agent-Skills for label and description); an entry's
 // rule may raise any of them via maxLabel / maxDescription / maxTag. `type` is
@@ -229,6 +234,15 @@ function payloadProblems(block: Record<string, unknown>): string[] {
   return problems;
 }
 
+// The installed harness release the config's top-level `version` must match.
+// Null when package.json is unreadable or carries no version string — the
+// comparison is then impossible and skipped (never guessed), mirroring
+// GEN-002's config-version rule.
+async function harnessVersionOf(ctx: RuleContext): Promise<string | null> {
+  const pkg = await tryReadJSON(ctx, PACKAGE_JSON);
+  return isRecord(pkg) && typeof pkg.version === 'string' ? pkg.version : null;
+}
+
 // Locate markdown.frontmatter under the consumer contract. Returns the block
 // to govern by, DEFAULT_CONFIG when the file or block is legitimately absent,
 // or null when the config is present but broken — in which case the floor
@@ -240,10 +254,12 @@ async function resolveBlock(ctx: RuleContext): Promise<Record<string, unknown> |
   if (raw === null) return DEFAULT_CONFIG; // no config file — the zero-config default
   const config = await tryReadJSON(ctx, CONFIG_PATH);
   if (!isRecord(config)) return null; // present but unparseable (or a non-object root)
+  if (typeof config.version !== 'string') return null; // no envelope stamp — present but invalid
+  const harnessVersion = await harnessVersionOf(ctx);
+  if (harnessVersion !== null && config.version !== harnessVersion) return null; // version skew — never interpret another release's data
   const md = config.markdown;
-  if (md === undefined) return DEFAULT_CONFIG; // namespace absent (e.g. a retired pre-v1 config) — default
+  if (md === undefined) return DEFAULT_CONFIG; // namespace absent in a healthy envelope — default
   if (!isRecord(md)) return null;
-  if (md.version !== CURRENT_FORMAT_VERSION) return null; // format skew — never interpret another format's data
   const block = md.frontmatter;
   if (block === undefined) return DEFAULT_CONFIG; // block absent in a healthy file — default
   if (!isRecord(block) || !blockSpineOk(block) || payloadProblems(block).length > 0) return null;
@@ -442,7 +458,7 @@ export default {
 
     'frontmatter-floor': {
       description:
-        "Every governed markdown file, resolved to its pathRules entry by FileSet arithmetic (glob include − exclude) first-match-wins — or to the built-in default when the config file or its markdown.frontmatter block is absent — carries the OKF floor: a kebab-case type (checked against the entry rule's allowedTypes, plus draft when settings.draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required when the entry's rule sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry claims and waives; an excluded file falls through. Under unmatched: 'error', every in-coverage file no entry claims is a violation. All-or-nothing consumer contract: an unparseable config, a format-version skew, or a spine- or payload-invalid block governs NOTHING — GEN-002 and frontmatter-config-valid are the loud gate. Violations emit at the matched entry's tier (default error).",
+        "Every governed markdown file, resolved to its pathRules entry by FileSet arithmetic (glob include − exclude) first-match-wins — or to the built-in default when the config file or its markdown.frontmatter block is absent — carries the OKF floor: a kebab-case type (checked against the entry rule's allowedTypes, plus draft when settings.draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required when the entry's rule sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry claims and waives; an excluded file falls through. Under unmatched: 'error', every in-coverage file no entry claims is a violation. All-or-nothing consumer contract: an unparseable config, a version stamp that is missing or skewed against the installed harness release, or a spine- or payload-invalid block governs NOTHING — GEN-002 and frontmatter-config-valid are the loud gate. Violations emit at the matched entry's tier (default error).",
       severity: 'error',
       async check(ctx) {
         const block = await resolveBlock(ctx);

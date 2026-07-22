@@ -1,26 +1,35 @@
 /// <reference path="../rules.d.ts" />
 
-// Sibling test for GEN-002-harness-config.rules.ts — pass and fail path for the
-// three envelope rules `config-json-parses`, `config-namespace-registered` and
-// `config-spine-valid`, exercised through check(ctx) against an in-memory
-// RuleContext. readFile/readJSON serve the root harness config
-// .typescript-ai-harness.json: omit everything to model an absent config (both
-// throw ENOENT), pass `config` for a parseable one, or `brokenJson` for a
-// present-but-unparseable one (readFile succeeds, readJSON throws). Canonical
+// Sibling test for GEN-002-harness-config.rules.ts — pass and fail path for
+// the four envelope rules `config-json-parses`, `config-extension-fenced`,
+// `config-version` and `config-shape-valid`, exercised through check(ctx)
+// against an in-memory RuleContext. readFile/readJSON serve three paths: the
+// root harness config .typescript-ai-harness.json (omit `config` to model an
+// absent one, pass `brokenJson` for a present-but-unparseable one), the config
+// extension .archgate/harness-config-extension.d.ts (defaults to a canonical
+// two-fence source; pass `extension` to override, `null` to model absence),
+// and package.json (defaults to the fixtures' HARNESS_VERSION — deliberately
+// not this repo's real version — `null` models an unreadable one). Canonical
 // pass/fail configs come from the shared conformance fixtures, which
 // GEN-003-frontmatter.rules.test.ts consumes too — the drift tripwire between
-// the spine validator and the block consumer.
+// the envelope validator and the block consumer. A final suite runs the rules
+// against the REAL repo files, so breaking the live extension fences, config,
+// or version stamp fails here as well as in archgate check.
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  FREE_TOP_LEVEL_CONFIG,
+  DEPTH_VIOLATION_CONFIG,
+  HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
   SPINE_INVALID_CONFIG,
   STRICT_CONFIG,
-  UNREGISTERED_BLOCK_CONFIG,
+  UNDECLARED_BLOCK_CONFIG,
+  UNDECLARED_NAMESPACE_CONFIG,
   VALID_CONFIG,
   VERSION_MISMATCH_CONFIG,
+  VERSION_MISSING_CONFIG,
 } from '../../test/fixtures/harness-config-fixtures';
 import ruleSet from './GEN-002-harness-config.rules';
 
@@ -30,12 +39,46 @@ interface Reported {
 }
 
 const CONFIG_PATH = '.typescript-ai-harness.json';
+const PACKAGE_JSON = 'package.json';
+const EXTENSION_DTS = '.archgate/harness-config-extension.d.ts';
 
-// These rules read only readFile/readJSON at the config path — no glob needed.
-function makeCtx(opts?: { config?: unknown; brokenJson?: boolean }) {
+// A canonical extension source: two fences from two owning ADRs. The second
+// declares a block no test config carries — a declared path absent from the
+// config is always fine (the owner's built-in default applies).
+const VALID_EXTENSION = [
+  '/// <reference path="./harness-config-core.d.ts" />',
+  'declare namespace Harness {',
+  '  // GEN-003-START: markdown.frontmatter',
+  '  interface FrontmatterRule {',
+  '    allowedTypes?: string[];',
+  '  }',
+  '  interface Markdown {',
+  '    frontmatter?: ConfigBlock<FrontmatterRule>;',
+  '  }',
+  '  interface Config {',
+  '    markdown?: Markdown;',
+  '  }',
+  '  // GEN-003-END',
+  '  // GEN-009-START: markdown.links',
+  '  interface Links {',
+  '    links?: ConfigBlock;',
+  '  }',
+  '  // GEN-009-END',
+  '}',
+].join('\n');
+
+// These rules read only readFile/readJSON at the three paths — no glob needed.
+function makeCtx(opts?: {
+  config?: unknown;
+  brokenJson?: boolean;
+  extension?: string | null;
+  packageVersion?: string | null;
+}) {
   const violations: Reported[] = [];
   const warnings: Reported[] = [];
-  const present = opts !== undefined && ('config' in opts || opts.brokenJson === true);
+  const configPresent = opts !== undefined && ('config' in opts || opts.brokenJson === true);
+  const extension = opts?.extension === undefined ? VALID_EXTENSION : opts.extension;
+  const packageVersion = opts?.packageVersion === undefined ? HARNESS_VERSION : opts.packageVersion;
   const ctx = {
     projectRoot: '/repo',
     scopedFiles: [],
@@ -44,16 +87,18 @@ function makeCtx(opts?: { config?: unknown; brokenJson?: boolean }) {
       return [];
     },
     async readFile(path: string) {
-      if (path === CONFIG_PATH && present) {
+      if (path === CONFIG_PATH && configPresent) {
         return opts?.brokenJson ? '{ "markdown": ' : JSON.stringify(opts?.config);
       }
+      if (path === EXTENSION_DTS && extension !== null) return extension;
       throw new Error(`ENOENT: ${path}`);
     },
     async readJSON(path: string) {
-      if (path === CONFIG_PATH && present) {
+      if (path === CONFIG_PATH && configPresent) {
         if (opts?.brokenJson) throw new SyntaxError('Unexpected end of JSON input');
         return opts?.config;
       }
+      if (path === PACKAGE_JSON && packageVersion !== null) return { version: packageVersion };
       throw new Error(`ENOENT: ${path}`);
     },
     report: {
@@ -65,19 +110,21 @@ function makeCtx(opts?: { config?: unknown; brokenJson?: boolean }) {
   return { ctx, violations, warnings };
 }
 
-// A v1 config whose frontmatter block carries the given spine fields.
+// A config at the mock harness version whose frontmatter block carries the
+// given spine fields.
 function block(fields: Record<string, unknown>): unknown {
-  return { markdown: { version: 1, frontmatter: fields } };
+  return { version: HARNESS_VERSION, markdown: { frontmatter: fields } };
 }
 
-// A v1 config with the given pathRules plus block-level extras.
+// Such a config with the given pathRules plus block-level extras.
 function entries(pathRules: unknown[], extra: Record<string, unknown> = {}): unknown {
   return block({ pathRules, ...extra });
 }
 
 const jsonParses = ruleSet.rules['config-json-parses'];
-const namespaceRegistered = ruleSet.rules['config-namespace-registered'];
-const spineValid = ruleSet.rules['config-spine-valid'];
+const extensionFenced = ruleSet.rules['config-extension-fenced'];
+const configVersion = ruleSet.rules['config-version'];
+const shapeValid = ruleSet.rules['config-shape-valid'];
 
 describe('config-json-parses', () => {
   it('no-ops when the config file is absent', async () => {
@@ -99,116 +146,251 @@ describe('config-json-parses', () => {
   });
 });
 
-describe('config-namespace-registered', () => {
+describe('config-extension-fenced', () => {
+  // A minimal extension around the given marker lines — the grammar cases
+  // below vary only the fences.
+  function extensionWith(...lines: string[]): string {
+    return ['declare namespace Harness {', ...lines.map((l) => `  ${l}`), '}'].join('\n');
+  }
+
+  it('passes the canonical two-fence extension', async () => {
+    const { ctx, violations } = makeCtx({});
+    await extensionFenced.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('no-ops when the extension file is absent', async () => {
+    const { ctx, violations } = makeCtx({ extension: null });
+    await extensionFenced.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('fails a START that declares no block path', async () => {
+    const { ctx, violations } = makeCtx({ extension: extensionWith('// GEN-003-START', '// GEN-003-END') });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /must declare its block path/.test(v.message))).toBe(true);
+  });
+
+  it('fails a malformed block path', async () => {
+    for (const path of ['markdown', 'markdown.frontmatter.extra', 'Markdown.frontmatter', 'markdown.front-matter']) {
+      const { ctx, violations } = makeCtx({
+        extension: extensionWith(`// GEN-003-START: ${path}`, '// GEN-003-END'),
+      });
+      await extensionFenced.check(ctx);
+      expect(violations.some((v) => /must declare its block path/.test(v.message))).toBe(true);
+    }
+  });
+
+  it('fails an END without a matching START', async () => {
+    const { ctx, violations } = makeCtx({ extension: extensionWith('// GEN-003-END') });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /closes without a matching 'GEN-003-START'/.test(v.message))).toBe(true);
+  });
+
+  it('fails a fence that is never closed', async () => {
+    const { ctx, violations } = makeCtx({ extension: extensionWith('// GEN-003-START: markdown.frontmatter') });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /is never closed/.test(v.message))).toBe(true);
+  });
+
+  it('fails a fence opening inside another fence', async () => {
+    const { ctx, violations } = makeCtx({
+      extension: extensionWith(
+        '// GEN-003-START: markdown.frontmatter',
+        '// GEN-009-START: markdown.links',
+        '// GEN-009-END',
+        '// GEN-003-END',
+      ),
+    });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /fences never nest or overlap/.test(v.message))).toBe(true);
+  });
+
+  it('fails an END whose ADR id differs from the open START', async () => {
+    const { ctx, violations } = makeCtx({
+      extension: extensionWith('// GEN-003-START: markdown.frontmatter', '// GEN-009-END'),
+    });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /must carry the same ADR id/.test(v.message))).toBe(true);
+  });
+
+  it('fails a path declared by two fences', async () => {
+    const { ctx, violations } = makeCtx({
+      extension: extensionWith(
+        '// GEN-003-START: markdown.frontmatter',
+        '// GEN-003-END',
+        '// GEN-009-START: markdown.frontmatter',
+        '// GEN-009-END',
+      ),
+    });
+    await extensionFenced.check(ctx);
+    expect(
+      violations.some((v) => /re-declares 'markdown.frontmatter'.*one owning fence per block/.test(v.message)),
+    ).toBe(true);
+  });
+
+  it('fails an END with trailing content', async () => {
+    const { ctx, violations } = makeCtx({
+      extension: extensionWith('// GEN-003-START: markdown.frontmatter', '// GEN-003-END: markdown.frontmatter'),
+    });
+    await extensionFenced.check(ctx);
+    expect(violations.some((v) => /trailing content after the END marker/.test(v.message))).toBe(true);
+  });
+});
+
+describe('config-version', () => {
   it('passes the canonical valid configs', async () => {
-    for (const config of [VALID_CONFIG, STRICT_CONFIG, FREE_TOP_LEVEL_CONFIG]) {
+    for (const config of [VALID_CONFIG, STRICT_CONFIG]) {
       const { ctx, violations } = makeCtx({ config });
-      await namespaceRegistered.check(ctx);
+      await configVersion.check(ctx);
       expect(violations).toEqual([]);
     }
   });
 
-  it('no-ops when the config file is absent', async () => {
-    const { ctx, violations } = makeCtx();
-    await namespaceRegistered.check(ctx);
-    expect(violations).toEqual([]);
-  });
-
-  it('no-ops on unparseable JSON (config-json-parses owns that failure)', async () => {
-    const { ctx, violations } = makeCtx({ brokenJson: true });
-    await namespaceRegistered.check(ctx);
-    expect(violations).toEqual([]);
-  });
-
-  it('fails when the config root is not a JSON object', async () => {
-    const { ctx, violations } = makeCtx({ config: [] });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /root must be a JSON object/.test(v.message))).toBe(true);
-  });
-
-  it('fails the retired top-level adr key with the rename tombstone', async () => {
-    const { ctx, violations } = makeCtx({ config: RETIRED_KEY_CONFIG });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /'adr' is retired/.test(v.message) && /markdown/.test(v.message))).toBe(true);
-  });
-
-  it('fails when markdown is not a JSON object', async () => {
-    const { ctx, violations } = makeCtx({ config: { markdown: 'yes' } });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /'markdown' must be a JSON object/.test(v.message))).toBe(true);
-  });
-
-  it('fails when markdown lacks the version stamp', async () => {
-    const { ctx, violations } = makeCtx({ config: { markdown: { frontmatter: { pathRules: [] } } } });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /'markdown.version' is required/.test(v.message))).toBe(true);
-  });
-
-  it('fails a non-positive-integer version', async () => {
-    for (const version of [0, 1.5, '1']) {
-      const { ctx, violations } = makeCtx({ config: { markdown: { version } } });
-      await namespaceRegistered.check(ctx);
-      expect(violations.some((v) => /'markdown.version' must be a positive integer/.test(v.message))).toBe(true);
+  it('no-ops when the config is absent, unparseable, or a non-object root', async () => {
+    for (const opts of [undefined, { brokenJson: true }, { config: [] }]) {
+      const { ctx, violations } = makeCtx(opts);
+      await configVersion.check(ctx);
+      expect(violations).toEqual([]);
     }
   });
 
-  it('fails a version this contract does not read, naming the migrate step', async () => {
-    const { ctx, violations } = makeCtx({ config: VERSION_MISMATCH_CONFIG });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /migrate/.test(v.message))).toBe(true);
+  it('fails a config without the version stamp', async () => {
+    for (const config of [VERSION_MISSING_CONFIG, RETIRED_KEY_CONFIG]) {
+      const { ctx, violations } = makeCtx({ config });
+      await configVersion.check(ctx);
+      expect(violations.some((v) => /'version' is required/.test(v.message))).toBe(true);
+    }
   });
 
-  it('fails an unregistered block name (the typo hole)', async () => {
-    const { ctx, violations } = makeCtx({ config: UNREGISTERED_BLOCK_CONFIG });
-    await namespaceRegistered.check(ctx);
-    expect(violations.some((v) => /'markdown.frontmater' is not a registered block/.test(v.message))).toBe(true);
+  it('fails a non-string version (the retired integer stamp included)', async () => {
+    for (const version of [1, 0.1, true]) {
+      const { ctx, violations } = makeCtx({ config: { version } });
+      await configVersion.check(ctx);
+      expect(violations.some((v) => /'version' must be a semver string/.test(v.message))).toBe(true);
+    }
+  });
+
+  it('fails a version stamped for another harness release, naming the migrate step', async () => {
+    const { ctx, violations } = makeCtx({ config: VERSION_MISMATCH_CONFIG });
+    await configVersion.check(ctx);
+    expect(violations.some((v) => /'9\.9\.9'.*'1\.2\.3'.*migrate/.test(v.message))).toBe(true);
+  });
+
+  it('reads the harness release from package.json, never a hardcoded constant', async () => {
+    const { ctx, violations } = makeCtx({ config: VERSION_MISMATCH_CONFIG, packageVersion: '9.9.9' });
+    await configVersion.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('skips the equality check when package.json yields no version — never guesses', async () => {
+    const { ctx, violations } = makeCtx({ config: VERSION_MISMATCH_CONFIG, packageVersion: null });
+    await configVersion.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('still requires the stamp itself when package.json yields no version', async () => {
+    const { ctx, violations } = makeCtx({ config: VERSION_MISSING_CONFIG, packageVersion: null });
+    await configVersion.check(ctx);
+    expect(violations.some((v) => /'version' is required/.test(v.message))).toBe(true);
   });
 });
 
-describe('config-spine-valid', () => {
+describe('config-shape-valid', () => {
   it('passes the canonical valid configs', async () => {
-    for (const config of [VALID_CONFIG, STRICT_CONFIG, FREE_TOP_LEVEL_CONFIG]) {
+    for (const config of [VALID_CONFIG, STRICT_CONFIG]) {
       const { ctx, violations } = makeCtx({ config });
-      await spineValid.check(ctx);
+      await shapeValid.check(ctx);
       expect(violations).toEqual([]);
     }
   });
 
   it('passes garbage inside a rule payload — payloads are opaque to the spine', async () => {
     const { ctx, violations } = makeCtx({ config: PAYLOAD_TYPO_CONFIG });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations).toEqual([]);
   });
 
   it('no-ops when the config file is absent or unparseable', async () => {
     for (const opts of [undefined, { brokenJson: true }]) {
       const { ctx, violations } = makeCtx(opts);
-      await spineValid.check(ctx);
+      await shapeValid.check(ctx);
       expect(violations).toEqual([]);
     }
   });
 
-  it('fails a registered block that is not a JSON object', async () => {
-    const { ctx, violations } = makeCtx({ config: { markdown: { version: 1, frontmatter: 'x' } } });
-    await spineValid.check(ctx);
+  it('fails when the config root is not a JSON object', async () => {
+    const { ctx, violations } = makeCtx({ config: [] });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /root must be a JSON object/.test(v.message))).toBe(true);
+  });
+
+  it('fails a namespace whose value is not an object of blocks', async () => {
+    const { ctx, violations } = makeCtx({ config: { version: HARNESS_VERSION, markdown: 'yes' } });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /'markdown' must be a namespace object holding config blocks/.test(v.message))).toBe(
+      true,
+    );
+  });
+
+  it('fails a block key no fence declares (the typo hole)', async () => {
+    const { ctx, violations } = makeCtx({ config: UNDECLARED_BLOCK_CONFIG });
+    await shapeValid.check(ctx);
+    expect(
+      violations.some(
+        (v) => /'markdown.frontmater' matches no block/.test(v.message) && /markdown.frontmatter/.test(v.message),
+      ),
+    ).toBe(true);
+  });
+
+  it('fails a namespace no fence declares — the extension file is the whole registry', async () => {
+    const { ctx, violations } = makeCtx({ config: UNDECLARED_NAMESPACE_CONFIG });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /'acmeGovernance.reviewers' matches no block/.test(v.message))).toBe(true);
+  });
+
+  it("fails the retired pre-restructure 'adr' namespace as undeclared", async () => {
+    const { ctx, violations } = makeCtx({ config: RETIRED_KEY_CONFIG });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /'adr.frontmatter' matches no block/.test(v.message))).toBe(true);
+  });
+
+  it('fails every present block as undeclared when the extension file is absent', async () => {
+    const { ctx, violations } = makeCtx({ config: VALID_CONFIG, extension: null });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /'markdown.frontmatter' matches no block/.test(v.message))).toBe(true);
+  });
+
+  it('fails a third key level below the block (the depth guard)', async () => {
+    const { ctx, violations } = makeCtx({ config: DEPTH_VIOLATION_CONFIG });
+    await shapeValid.check(ctx);
+    expect(
+      violations.some((v) => /'markdown.frontmatter.frontmatter' is not a spine key/.test(v.message)) &&
+        violations.some((v) => /'markdown.frontmatter.pathRules' must be an array/.test(v.message)),
+    ).toBe(true);
+  });
+
+  it('fails a declared block that is not a JSON object', async () => {
+    const { ctx, violations } = makeCtx({ config: { version: HARNESS_VERSION, markdown: { frontmatter: 'x' } } });
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /'markdown.frontmatter' must be a JSON object/.test(v.message))).toBe(true);
   });
 
-  it('fails an unknown block-level key (draftEscape belongs under settings now)', async () => {
+  it('fails an unknown block-level key (draftEscape belongs under settings)', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'] }], { draftEscape: true }) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /'markdown.frontmatter.draftEscape' is not a spine key/.test(v.message))).toBe(true);
   });
 
   it('fails an invalid unmatched policy', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'] }], { unmatched: 'govern' }) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /unmatched' must be 'exempt' or 'error'/.test(v.message))).toBe(true);
   });
 
   it("fails unmatched: 'error' without a coverage FileSet", async () => {
     const { ctx, violations } = makeCtx({ config: SPINE_INVALID_CONFIG });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /requires a coverage FileSet/.test(v.message))).toBe(true);
   });
 
@@ -216,15 +398,23 @@ describe('config-spine-valid', () => {
     const { ctx, violations } = makeCtx({
       config: entries([{ include: ['x.md'] }], { coverage: { include: ['**/*.md'] } }),
     });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /coverage' is only meaningful with unmatched: 'error'/.test(v.message))).toBe(true);
+  });
+
+  it('fails a non-object coverage FileSet', async () => {
+    const { ctx, violations } = makeCtx({
+      config: entries([{ include: ['x.md'] }], { unmatched: 'error', coverage: 'docs/**' }),
+    });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /coverage' must be a FileSet object/.test(v.message))).toBe(true);
   });
 
   it('fails a coverage FileSet with no include', async () => {
     const { ctx, violations } = makeCtx({
       config: entries([{ include: ['x.md'] }], { unmatched: 'error', coverage: {} }),
     });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /coverage\.include' must be a non-empty array/.test(v.message))).toBe(true);
   });
 
@@ -235,7 +425,7 @@ describe('config-spine-valid', () => {
         coverage: { include: ['**/*.md'], matches: [] },
       }),
     });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /'markdown.frontmatter.coverage.matches' is not a FileSet key/.test(v.message))).toBe(
       true,
     );
@@ -243,42 +433,39 @@ describe('config-spine-valid', () => {
 
   it('fails a non-object settings', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'] }], { settings: 'yes' }) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /settings' must be a JSON object/.test(v.message))).toBe(true);
   });
 
   it('fails a missing or non-array pathRules', async () => {
     for (const fields of [{}, { pathRules: 'nope' }]) {
       const { ctx, violations } = makeCtx({ config: block(fields) });
-      await spineValid.check(ctx);
+      await shapeValid.check(ctx);
       expect(violations.some((v) => /pathRules' must be an array/.test(v.message))).toBe(true);
     }
   });
 
   it('fails a non-object entry', async () => {
     const { ctx, violations } = makeCtx({ config: entries(['x.md']) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /pathRules\[0\]' must be an object/.test(v.message))).toBe(true);
   });
 
-  it("fails an unknown entry key (old flat domain keys belong under 'rule')", async () => {
-    const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], allowedTypes: ['a'] }]) });
-    await spineValid.check(ctx);
-    expect(
-      violations.some((v) => /allowedTypes' is not a spine entry key/.test(v.message) && /'rule'/.test(v.message)),
-    ).toBe(true);
-  });
-
-  it("fails the retired 'match' key with the rename tombstone", async () => {
-    const { ctx, violations } = makeCtx({ config: entries([{ match: 'x.md' }]) });
-    await spineValid.check(ctx);
-    expect(violations.some((v) => /match' is retired/.test(v.message) && /include/.test(v.message))).toBe(true);
+  it("fails an unknown entry key (flat domain keys belong under 'rule')", async () => {
+    for (const entry of [
+      { include: ['x.md'], allowedTypes: ['a'] },
+      { match: 'x.md', include: ['x.md'] }, // the retired pre-restructure 'match' key
+    ]) {
+      const { ctx, violations } = makeCtx({ config: entries([entry]) });
+      await shapeValid.check(ctx);
+      expect(violations.some((v) => /is not a spine entry key/.test(v.message) && /'rule'/.test(v.message))).toBe(true);
+    }
   });
 
   it('fails a missing, empty, or non-array include', async () => {
     for (const entry of [{}, { include: [] }, { include: 'x.md' }, { include: ['ok', ''] }]) {
       const { ctx, violations } = makeCtx({ config: entries([entry]) });
-      await spineValid.check(ctx);
+      await shapeValid.check(ctx);
       expect(
         violations.some((v) => /include' must be a non-empty array of non-empty glob strings/.test(v.message)),
       ).toBe(true);
@@ -288,7 +475,7 @@ describe('config-spine-valid', () => {
   it('fails an invalid exclude', async () => {
     for (const exclude of [[], [1], 'x.md']) {
       const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], exclude }]) });
-      await spineValid.check(ctx);
+      await shapeValid.check(ctx);
       expect(
         violations.some((v) => /exclude' must be a non-empty array of non-empty glob strings/.test(v.message)),
       ).toBe(true);
@@ -297,13 +484,13 @@ describe('config-spine-valid', () => {
 
   it('fails a non-boolean exempt', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], exempt: 'yes' }]) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /exempt' must be a boolean/.test(v.message))).toBe(true);
   });
 
   it("fails an exempt entry that carries 'rule'", async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], exempt: true, rule: {} }]) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /must not carry 'rule'/.test(v.message))).toBe(true);
   });
 
@@ -311,47 +498,88 @@ describe('config-spine-valid', () => {
     const { ctx, violations } = makeCtx({
       config: entries([{ include: ['x.md'], exempt: true, severity: 'error' }]),
     });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /must not carry 'severity'/.test(v.message))).toBe(true);
   });
 
   it('fails an invalid entry tier', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], severity: 'fatal' }]) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /severity' must be 'error' or 'warning'/.test(v.message))).toBe(true);
   });
 
   it('fails a non-object rule payload', async () => {
     const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], rule: 'strict' }]) });
-    await spineValid.check(ctx);
+    await shapeValid.check(ctx);
     expect(violations.some((v) => /rule' must be a JSON object/.test(v.message))).toBe(true);
   });
 });
 
-describe('GEN-002 report hygiene', () => {
-  it('fails a non-object coverage FileSet', async () => {
-    const { ctx, violations } = makeCtx({
-      config: entries([{ include: ['x.md'] }], { unmatched: 'error', coverage: 'docs/**' }),
-    });
-    await spineValid.check(ctx);
-    expect(violations.some((v) => /coverage' must be a FileSet object/.test(v.message))).toBe(true);
-  });
+describe('GEN-002 against the real repo files', () => {
+  // A ctx over the actual working tree: breaking the live extension fences,
+  // the seeded config, or the version stamp fails this suite too — not only
+  // archgate check.
+  function realCtx() {
+    const violations: Reported[] = [];
+    const repoRoot = new URL('../../', import.meta.url);
+    const ctx = {
+      projectRoot: '/repo',
+      scopedFiles: [],
+      changedFiles: [],
+      async glob() {
+        return [];
+      },
+      async readFile(path: string) {
+        return readFileSync(new URL(path, repoRoot), 'utf8');
+      },
+      async readJSON(path: string) {
+        return JSON.parse(readFileSync(new URL(path, repoRoot), 'utf8')) as unknown;
+      },
+      report: {
+        violation: (d: Reported) => violations.push(d),
+        warning: () => {},
+        info: () => {},
+      },
+    } as unknown as RuleContext;
+    return { ctx, violations };
+  }
 
-  it('embeds the provenance tag and config-file attribution in every message', async () => {
+  it('the live extension, config, and version stamp satisfy all four rules', async () => {
+    const { ctx, violations } = realCtx();
+    for (const rule of [jsonParses, extensionFenced, configVersion, shapeValid]) {
+      await rule.check(ctx);
+    }
+    expect(violations).toEqual([]);
+  });
+});
+
+describe('GEN-002 report hygiene', () => {
+  it('embeds the provenance tag and file attribution in every message', async () => {
     const broken = {
+      version: 7,
       adr: {},
-      markdown: { version: 2, frontmater: {}, frontmatter: { unmatched: 'govern', pathRules: [{ match: 'x' }] } },
+      markdown: { frontmater: {}, frontmatter: { unmatched: 'govern', pathRules: [{ match: 'x' }] } },
     };
     const { ctx, violations } = makeCtx({ config: broken });
-    await namespaceRegistered.check(ctx);
-    await spineValid.check(ctx);
+    await configVersion.check(ctx);
+    await shapeValid.check(ctx);
     const { ctx: parseCtx, violations: parseViolations } = makeCtx({ brokenJson: true });
     await jsonParses.check(parseCtx);
-    const all = [...violations, ...parseViolations];
-    expect(all.length).toBeGreaterThan(4);
-    for (const v of all) {
-      expect(v.message).toMatch(/\(GEN-002 \[config-(json-parses|namespace-registered|spine-valid)\]\)\.$/);
+    const configSide = [...violations, ...parseViolations];
+    expect(configSide.length).toBeGreaterThan(4);
+    for (const v of configSide) {
+      expect(v.message).toMatch(/\(GEN-002 \[config-(json-parses|version|shape-valid)\]\)\.$/);
       expect(v.file).toBe(CONFIG_PATH);
+    }
+
+    const { ctx: fenceCtx, violations: fenceViolations } = makeCtx({
+      extension: 'declare namespace Harness {\n  // GEN-003-START\n}',
+    });
+    await extensionFenced.check(fenceCtx);
+    expect(fenceViolations.length).toBeGreaterThan(1);
+    for (const v of fenceViolations) {
+      expect(v.message).toMatch(/\(GEN-002 \[config-extension-fenced\]\)\.$/);
+      expect(v.file).toBe(EXTENSION_DTS);
     }
   });
 });

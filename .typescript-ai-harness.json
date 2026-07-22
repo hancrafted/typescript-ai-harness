@@ -1,6 +1,6 @@
 {
+  "version": "0.1.0",
   "markdown": {
-    "version": 1,
     "frontmatter": {
       "unmatched": "exempt",
       "settings": { "draftEscape": true },

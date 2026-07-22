@@ -7,19 +7,24 @@
 // .typescript-ai-harness.json: omit `config` to model an absent one
 // (both throw ENOENT → the built-in DEFAULT applies); pass `brokenJson` for a
 // present-but-unparseable one (readFile succeeds, readJSON throws → the floor
-// governs NOTHING). Canonical pass/fail configs come from the shared
+// governs NOTHING). readJSON also serves package.json at the fixtures'
+// HARNESS_VERSION — the installed harness release the config's top-level
+// `version` must match. Canonical pass/fail configs come from the shared
 // conformance fixtures, which GEN-002-harness-config.rules.test.ts consumes
-// too — the drift tripwire between the spine validator and this consumer.
+// too — the drift tripwire between the envelope validator and this consumer.
 
 import { describe, expect, it } from 'vitest';
 import {
+  DEPTH_VIOLATION_CONFIG,
+  HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
   SPINE_INVALID_CONFIG,
   STRICT_CONFIG,
-  UNREGISTERED_BLOCK_CONFIG,
+  UNDECLARED_BLOCK_CONFIG,
   VALID_CONFIG,
   VERSION_MISMATCH_CONFIG,
+  VERSION_MISSING_CONFIG,
 } from '../../test/fixtures/harness-config-fixtures';
 import ruleSet from './GEN-003-frontmatter.rules';
 
@@ -83,6 +88,7 @@ function makeCtx(
         if (opts?.brokenJson) throw new SyntaxError('Unexpected end of JSON input');
         return opts?.config;
       }
+      if (path === 'package.json') return { version: HARNESS_VERSION };
       throw new Error(`ENOENT: ${path}`);
     },
     report: {
@@ -94,10 +100,11 @@ function makeCtx(
   return { ctx, violations, warnings };
 }
 
-// Build a v1 harness config whose markdown.frontmatter block carries the given
-// pathRules plus any block-level extras (unmatched, coverage, settings).
+// Build a harness config at the mock harness release whose markdown.frontmatter
+// block carries the given pathRules plus any block-level extras (unmatched,
+// coverage, settings).
 function harnessConfig(pathRules: unknown[], extra: Record<string, unknown> = {}): unknown {
-  return { markdown: { version: 1, frontmatter: { pathRules, ...extra } } };
+  return { version: HARNESS_VERSION, markdown: { frontmatter: { pathRules, ...extra } } };
 }
 
 // Build a governed markdown file from frontmatter lines.
@@ -118,7 +125,11 @@ describe('frontmatter-config-valid', () => {
   });
 
   it('no-ops when the config file, namespace, or block is absent', async () => {
-    for (const opts of [undefined, { config: { markdown: { version: 1 } } }, { config: RETIRED_KEY_CONFIG }]) {
+    for (const opts of [
+      undefined,
+      { config: { version: HARNESS_VERSION, markdown: {} } },
+      { config: RETIRED_KEY_CONFIG },
+    ]) {
       const { ctx, violations } = makeCtx({}, opts);
       await configValid.check(ctx);
       expect(violations).toEqual([]);
@@ -509,16 +520,10 @@ describe("frontmatter-floor coverage (unmatched: 'error')", () => {
   });
 
   it('an entry-excluded file inside coverage is NOT claimed — it surfaces as a coverage violation', async () => {
-    const m = {
-      markdown: {
-        version: 1,
-        frontmatter: {
-          unmatched: 'error',
-          coverage: { include: ['docs/**/*.md'] },
-          pathRules: [{ include: ['docs/**/*.md'], exclude: ['docs/carved.md'], rule: { label: 'title' } }],
-        },
-      },
-    };
+    const m = harnessConfig([{ include: ['docs/**/*.md'], exclude: ['docs/carved.md'], rule: { label: 'title' } }], {
+      unmatched: 'error',
+      coverage: { include: ['docs/**/*.md'] },
+    });
     const files = {
       'docs/kept.md': md('type: doc\ntitle: "K"'),
       'docs/carved.md': md('type: doc\ntitle: "C"'), // excluded → unclaimed → in-coverage violation
@@ -554,26 +559,38 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
     expect(violations).toEqual([]);
   });
 
-  it('governs nothing on a format-version skew', async () => {
+  it('governs nothing on a version skew against the installed harness release', async () => {
     const { ctx, violations } = makeCtx(failingFiles, { config: VERSION_MISMATCH_CONFIG });
     await floor.check(ctx);
     expect(violations).toEqual([]);
   });
 
-  it('falls back to the built-in default when only retired namespaces are present', async () => {
-    // Pre-v1 config: markdown is absent → README is default-governed (and
-    // fails), docs/adr is not a default path (and passes) — while GEN-002
-    // flags the retired key loudly.
+  it('governs nothing when the version stamp is missing', async () => {
+    const { ctx, violations } = makeCtx(failingFiles, { config: VERSION_MISSING_CONFIG });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('governs nothing on the retired pre-restructure format (unstamped, undeclared keys)', async () => {
+    // Present but invalid — no envelope stamp, so this consumer never
+    // interprets it (not even to fall back to the default); GEN-002 carries
+    // the loud config-version and config-shape-valid errors.
     const { ctx, violations } = makeCtx(failingFiles, { config: RETIRED_KEY_CONFIG });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('governs nothing on a depth-violating block (spine-invalid)', async () => {
+    const { ctx, violations } = makeCtx(failingFiles, { config: DEPTH_VIOLATION_CONFIG });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('falls back to the built-in default when the block name is a typo in a healthy envelope', async () => {
+    const { ctx, violations } = makeCtx(failingFiles, { config: UNDECLARED_BLOCK_CONFIG });
     await floor.check(ctx);
     expect(violations.some((v) => v.file === 'README.md')).toBe(true);
     expect(violations.some((v) => v.file === 'docs/adr/a.md')).toBe(false);
-  });
-
-  it('falls back to the built-in default when the block name is a typo', async () => {
-    const { ctx, violations } = makeCtx(failingFiles, { config: UNREGISTERED_BLOCK_CONFIG });
-    await floor.check(ctx);
-    expect(violations.some((v) => v.file === 'README.md')).toBe(true);
   });
 
   it('governs by the shared VALID_CONFIG fixture end to end', async () => {
@@ -632,7 +649,7 @@ describe('frontmatter-floor built-in default (no harness config)', () => {
 
   it('applies the default when a healthy config omits the frontmatter block', async () => {
     const files = { 'README.md': md('type: readme\ntitle: "R"') }; // wrong type under the default
-    const { ctx, violations } = makeCtx(files, { config: { markdown: { version: 1 } } });
+    const { ctx, violations } = makeCtx(files, { config: { version: HARNESS_VERSION, markdown: {} } });
     await floor.check(ctx);
     expect(violations.some((v) => v.file === 'README.md')).toBe(true);
   });

@@ -10,5 +10,12 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src", "test", ".archgate/harness-config.d.ts", "*.ts", "*.mts"]
+  "include": [
+    "src",
+    "test",
+    ".archgate/harness-config-core.d.ts",
+    ".archgate/harness-config-extension.d.ts",
+    "*.ts",
+    "*.mts"
+  ]
 }
