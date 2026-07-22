@@ -27,12 +27,14 @@
 // rules DECLARE the error tier per GEN-001 §7; the floor emits per-file
 // reports at the matched entry's configured tier (default error).
 const CONFIG_PATH = '.typescript-ai-harness.json';
-// Deliberate copy of GEN-002's version probe (rules files cannot share runtime
-// code): the config's top-level `version` must equal the installed harness
-// release in package.json, or this consumer refuses to interpret the file —
-// a config authored for another release is never read with this one's
-// semantics. The shared conformance fixtures are the drift tripwire.
+// Deliberate copy of GEN-002's version probe and semver shape check (rules
+// files cannot share runtime code): the config's top-level `version` must be a
+// semver-shaped string equal to the installed harness release in package.json,
+// or this consumer refuses to interpret the file — a config authored for
+// another release is never read with this one's semantics. The shared
+// conformance fixtures are the drift tripwire.
 const PACKAGE_JSON = 'package.json';
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 // Default ceilings (OKF/Agent-Skills for label and description); an entry's
 // rule may raise any of them via maxLabel / maxDescription / maxTag. `type` is
@@ -254,7 +256,7 @@ async function resolveBlock(ctx: RuleContext): Promise<Record<string, unknown> |
   if (raw === null) return DEFAULT_CONFIG; // no config file — the zero-config default
   const config = await tryReadJSON(ctx, CONFIG_PATH);
   if (!isRecord(config)) return null; // present but unparseable (or a non-object root)
-  if (typeof config.version !== 'string') return null; // no envelope stamp — present but invalid
+  if (typeof config.version !== 'string' || !SEMVER_RE.test(config.version)) return null; // stamp missing or malformed — present but invalid
   const harnessVersion = await harnessVersionOf(ctx);
   if (harnessVersion !== null && config.version !== harnessVersion) return null; // version skew — never interpret another release's data
   const md = config.markdown;

@@ -9,7 +9,7 @@
 /** The harness release the MOCK package.json serves in both rules tests —
  * deliberately NOT this repo's real version, proving the rules read the
  * source of truth (`package.json` `.version`) instead of hardcoding one. */
-export const HARNESS_VERSION = '1.2.3';
+export const MOCK_HARNESS_VERSION = '1.2.3';
 
 /** Fully valid config exercising every spine feature: settings, an
  * entry-level exclude (fall-through), an exempt entry, a multi-glob include
@@ -17,7 +17,7 @@ export const HARNESS_VERSION = '1.2.3';
  * GEN-002: all four rules pass. GEN-003: frontmatter-config-valid passes and
  * the floor governs by it. */
 export const VALID_CONFIG: Harness.Config = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       unmatched: 'exempt',
@@ -42,7 +42,7 @@ export const VALID_CONFIG: Harness.Config = {
  * four rules pass. GEN-003: the floor errors on every in-coverage file no
  * entry claims. */
 export const STRICT_CONFIG: Harness.Config = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       unmatched: 'error',
@@ -60,7 +60,7 @@ export const STRICT_CONFIG: Harness.Config = {
  * silent (the payload is fine — the spine is GEN-002's finding) and the floor
  * governs nothing. */
 export const SPINE_INVALID_CONFIG = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       unmatched: 'error',
@@ -74,7 +74,7 @@ export const SPINE_INVALID_CONFIG = {
  * pass (payloads are opaque to the spine; the boundary proof). GEN-003:
  * frontmatter-config-valid fails and the floor governs nothing. */
 export const PAYLOAD_TYPO_CONFIG = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       pathRules: [
@@ -104,6 +104,16 @@ export const VERSION_MISSING_CONFIG = {
   },
 };
 
+/** A stamp that is a string but not semver-shaped. GEN-002: config-version
+ * fails on shape — even when package.json yields no version to compare
+ * against. GEN-003: the floor governs nothing, on the same shape check. */
+export const VERSION_MALFORMED_CONFIG = {
+  version: 'banana',
+  markdown: {
+    frontmatter: { pathRules: [{ include: ['docs/adr/*.md'], rule: { label: 'title' } }] },
+  },
+};
+
 /** The retired pre-restructure format: top-level 'adr' key, flat entries with
  * 'match', no version stamp. GEN-002: config-version fails (no stamp) and
  * config-shape-valid fails ('adr.frontmatter' is not a declared block).
@@ -125,7 +135,7 @@ export const RETIRED_KEY_CONFIG = {
  * the floor falls back to the built-in default — loudly flagged, never
  * silently interpreted. */
 export const UNDECLARED_BLOCK_CONFIG = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmater: { pathRules: [{ include: ['docs/adr/*.md'] }] },
   },
@@ -137,7 +147,7 @@ export const UNDECLARED_BLOCK_CONFIG = {
  * GEN-002: config-shape-valid fails ('acmeGovernance.reviewers' matches no
  * declared path). GEN-003: unaffected ('markdown' absent → default). */
 export const UNDECLARED_NAMESPACE_CONFIG = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   acmeGovernance: { reviewers: { pathRules: [] } },
 };
 
@@ -147,7 +157,7 @@ export const UNDECLARED_NAMESPACE_CONFIG = {
  * spine key and pathRules is missing). GEN-003: the floor governs nothing
  * (spine-invalid block). */
 export const DEPTH_VIOLATION_CONFIG = {
-  version: HARNESS_VERSION,
+  version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       frontmatter: { pathRules: [{ include: ['docs/adr/*.md'] }] },

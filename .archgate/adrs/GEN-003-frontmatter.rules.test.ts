@@ -8,7 +8,7 @@
 // (both throw ENOENT → the built-in DEFAULT applies); pass `brokenJson` for a
 // present-but-unparseable one (readFile succeeds, readJSON throws → the floor
 // governs NOTHING). readJSON also serves package.json at the fixtures'
-// HARNESS_VERSION — the installed harness release the config's top-level
+// MOCK_HARNESS_VERSION — the installed harness release the config's top-level
 // `version` must match. Canonical pass/fail configs come from the shared
 // conformance fixtures, which GEN-002-harness-config.rules.test.ts consumes
 // too — the drift tripwire between the envelope validator and this consumer.
@@ -16,13 +16,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_VIOLATION_CONFIG,
-  HARNESS_VERSION,
+  MOCK_HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
   SPINE_INVALID_CONFIG,
   STRICT_CONFIG,
   UNDECLARED_BLOCK_CONFIG,
   VALID_CONFIG,
+  VERSION_MALFORMED_CONFIG,
   VERSION_MISMATCH_CONFIG,
   VERSION_MISSING_CONFIG,
 } from '../../test/fixtures/harness-config-fixtures';
@@ -57,13 +58,16 @@ function globToRegExp(pattern: string): RegExp {
 // ctx.readFile throws. `config` is served by readJSON at the config path (and
 // its JSON text by readFile — the floor's absent-vs-broken probe); omit it
 // entirely to model an absent config. `brokenJson` models a present config that
-// fails to parse: readFile succeeds, readJSON throws.
+// fails to parse: readFile succeeds, readJSON throws. `packageVersion`
+// overrides the harness release the mock package.json serves (`null` models an
+// unreadable one).
 function makeCtx(
   files: Record<string, string>,
-  opts?: { config?: unknown; symlinks?: string[]; brokenJson?: boolean },
+  opts?: { config?: unknown; symlinks?: string[]; brokenJson?: boolean; packageVersion?: string | null },
 ) {
   const violations: Reported[] = [];
   const warnings: Reported[] = [];
+  const packageVersion = opts?.packageVersion === undefined ? MOCK_HARNESS_VERSION : opts.packageVersion;
   const symlinks = opts?.symlinks ?? [];
   const present = opts !== undefined && ('config' in opts || opts.brokenJson === true);
   const allPaths = [...Object.keys(files), ...symlinks];
@@ -88,7 +92,7 @@ function makeCtx(
         if (opts?.brokenJson) throw new SyntaxError('Unexpected end of JSON input');
         return opts?.config;
       }
-      if (path === 'package.json') return { version: HARNESS_VERSION };
+      if (path === 'package.json' && packageVersion !== null) return { version: packageVersion };
       throw new Error(`ENOENT: ${path}`);
     },
     report: {
@@ -104,7 +108,7 @@ function makeCtx(
 // block carries the given pathRules plus any block-level extras (unmatched,
 // coverage, settings).
 function harnessConfig(pathRules: unknown[], extra: Record<string, unknown> = {}): unknown {
-  return { version: HARNESS_VERSION, markdown: { frontmatter: { pathRules, ...extra } } };
+  return { version: MOCK_HARNESS_VERSION, markdown: { frontmatter: { pathRules, ...extra } } };
 }
 
 // Build a governed markdown file from frontmatter lines.
@@ -127,7 +131,7 @@ describe('frontmatter-config-valid', () => {
   it('no-ops when the config file, namespace, or block is absent', async () => {
     for (const opts of [
       undefined,
-      { config: { version: HARNESS_VERSION, markdown: {} } },
+      { config: { version: MOCK_HARNESS_VERSION, markdown: {} } },
       { config: RETIRED_KEY_CONFIG },
     ]) {
       const { ctx, violations } = makeCtx({}, opts);
@@ -571,6 +575,12 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
     expect(violations).toEqual([]);
   });
 
+  it('governs nothing on a malformed stamp, even when package.json yields no version', async () => {
+    const { ctx, violations } = makeCtx(failingFiles, { config: VERSION_MALFORMED_CONFIG, packageVersion: null });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
   it('governs nothing on the retired pre-restructure format (unstamped, undeclared keys)', async () => {
     // Present but invalid — no envelope stamp, so this consumer never
     // interprets it (not even to fall back to the default); GEN-002 carries
@@ -649,7 +659,7 @@ describe('frontmatter-floor built-in default (no harness config)', () => {
 
   it('applies the default when a healthy config omits the frontmatter block', async () => {
     const files = { 'README.md': md('type: readme\ntitle: "R"') }; // wrong type under the default
-    const { ctx, violations } = makeCtx(files, { config: { version: HARNESS_VERSION, markdown: {} } });
+    const { ctx, violations } = makeCtx(files, { config: { version: MOCK_HARNESS_VERSION, markdown: {} } });
     await floor.check(ctx);
     expect(violations.some((v) => v.file === 'README.md')).toBe(true);
   });

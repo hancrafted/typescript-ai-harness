@@ -30,6 +30,10 @@ const EXTENSION_DTS = '.archgate/harness-config-extension.d.ts';
 // namespace holding blocks.
 const VERSION_KEY = 'version';
 
+// The practical core of the semver grammar — enough to keep the stamp's shape
+// honest even when package.json yields nothing to compare against.
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 // The fence grammar of the config extension. A marker line is
 // `// <ADR-ID>-START: <namespace.block>` or `// <ADR-ID>-END`; the loose
 // marker scan catches malformed variants so they error instead of being
@@ -290,7 +294,7 @@ export default {
 
     'config-version': {
       description:
-        "The config's top-level `version` is the compatibility envelope: required, a string, exactly equal to the installed harness release (package.json .version) — the honest pre-1.0 semantics where every release may break the format; a mismatch errors naming the migrate step (loosening to semver-range compatibility arrives with it, #11). A config authored for another release is never reinterpreted under this one's semantics. No-ops when the config is absent, unparseable, or has a non-object root (config-shape-valid owns that finding), and skips the equality check when package.json yields no version to compare against.",
+        "The config's top-level `version` is the compatibility envelope: required, a semver-shaped string, exactly equal to the installed harness release (package.json .version) — the honest pre-1.0 semantics where every release may break the format; a mismatch errors naming the migrate step (loosening to semver-range compatibility arrives with it, #11). A config authored for another release is never reinterpreted under this one's semantics. No-ops when the config is absent, unparseable, or has a non-object root (config-shape-valid owns that finding), and skips the equality check — but never the shape check — when package.json yields no version to compare against.",
       severity: 'error',
       async check(ctx) {
         const emit: Emit = (message) =>
@@ -305,7 +309,7 @@ export default {
           );
           return;
         }
-        if (typeof stamp !== 'string') {
+        if (typeof stamp !== 'string' || !SEMVER_RE.test(stamp)) {
           emit(
             `top-level 'version' must be a semver string matching the installed harness release${harnessVersion === null ? '' : ` ('${harnessVersion}')`}`,
           );
@@ -321,7 +325,7 @@ export default {
 
     'config-shape-valid': {
       description:
-        "The config is `{version, [namespace]: {[block]: ConfigBlock}}`, validated domain-blind: every top-level key beside `version` is a namespace object holding blocks; every present `namespace.block` key matches a path some extension fence declares (the typo guard — 'markdown.frontmater' errors instead of silently falling back to the block's default, yet no concrete name is hardcoded here); a declared path absent from the config is fine (the owner's built-in default). Each block is a ConfigBlock exactly two key levels deep (the depth guard) satisfying the generic spine: closed block keys {unmatched, coverage, settings, pathRules}; unmatched is 'exempt' or 'error'; a coverage FileSet is present iff unmatched is 'error'; FileSets are {include, exclude} with include a non-empty array of non-empty globs; entries are closed to {include, exclude, exempt, severity, rule}; an exempt entry carries neither rule nor severity; the entry tier is 'error' or 'warning'. The `rule` payload and `settings` contents stay opaque — their schemas belong to the block's owning ADR. No-ops when the config is absent or unparseable.",
+        "The config is `{version, [namespace]: {[block]: ConfigBlock}}`, validated domain-blind: every top-level key beside `version` is a namespace object holding blocks; every present `namespace.block` key matches a path some extension fence declares (the typo guard — a misspelled block name errors instead of silently falling back to the block's default, yet no concrete name is hardcoded here); a declared path absent from the config is fine (the owner's built-in default). Each block is a ConfigBlock exactly two key levels deep (the depth guard) satisfying the generic spine: closed block keys {unmatched, coverage, settings, pathRules}; unmatched is 'exempt' or 'error'; a coverage FileSet is present iff unmatched is 'error'; FileSets are {include, exclude} with include a non-empty array of non-empty globs; entries are closed to {include, exclude, exempt, severity, rule}; an exempt entry carries neither rule nor severity; the entry tier is 'error' or 'warning'. The `rule` payload and `settings` contents stay opaque — their schemas belong to the block's owning ADR. No-ops when the config is absent or unparseable.",
       severity: 'error',
       async check(ctx) {
         const emit: Emit = (message) =>

@@ -8,7 +8,7 @@
 // absent one, pass `brokenJson` for a present-but-unparseable one), the config
 // extension .archgate/harness-config-extension.d.ts (defaults to a canonical
 // two-fence source; pass `extension` to override, `null` to model absence),
-// and package.json (defaults to the fixtures' HARNESS_VERSION — deliberately
+// and package.json (defaults to the fixtures' MOCK_HARNESS_VERSION — deliberately
 // not this repo's real version — `null` models an unreadable one). Canonical
 // pass/fail configs come from the shared conformance fixtures, which
 // GEN-003-frontmatter.rules.test.ts consumes too — the drift tripwire between
@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_VIOLATION_CONFIG,
-  HARNESS_VERSION,
+  MOCK_HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
   SPINE_INVALID_CONFIG,
@@ -28,6 +28,7 @@ import {
   UNDECLARED_BLOCK_CONFIG,
   UNDECLARED_NAMESPACE_CONFIG,
   VALID_CONFIG,
+  VERSION_MALFORMED_CONFIG,
   VERSION_MISMATCH_CONFIG,
   VERSION_MISSING_CONFIG,
 } from '../../test/fixtures/harness-config-fixtures';
@@ -78,7 +79,7 @@ function makeCtx(opts?: {
   const warnings: Reported[] = [];
   const configPresent = opts !== undefined && ('config' in opts || opts.brokenJson === true);
   const extension = opts?.extension === undefined ? VALID_EXTENSION : opts.extension;
-  const packageVersion = opts?.packageVersion === undefined ? HARNESS_VERSION : opts.packageVersion;
+  const packageVersion = opts?.packageVersion === undefined ? MOCK_HARNESS_VERSION : opts.packageVersion;
   const ctx = {
     projectRoot: '/repo',
     scopedFiles: [],
@@ -113,7 +114,7 @@ function makeCtx(opts?: {
 // A config at the mock harness version whose frontmatter block carries the
 // given spine fields.
 function block(fields: Record<string, unknown>): unknown {
-  return { version: HARNESS_VERSION, markdown: { frontmatter: fields } };
+  return { version: MOCK_HARNESS_VERSION, markdown: { frontmatter: fields } };
 }
 
 // Such a config with the given pathRules plus block-level extras.
@@ -263,8 +264,8 @@ describe('config-version', () => {
     }
   });
 
-  it('fails a non-string version (the retired integer stamp included)', async () => {
-    for (const version of [1, 0.1, true]) {
+  it('fails a non-string or non-semver version (the retired integer stamp included)', async () => {
+    for (const version of [1, 0.1, true, 'banana', 'v1.2.3', '1.2']) {
       const { ctx, violations } = makeCtx({ config: { version } });
       await configVersion.check(ctx);
       expect(violations.some((v) => /'version' must be a semver string/.test(v.message))).toBe(true);
@@ -293,6 +294,12 @@ describe('config-version', () => {
     const { ctx, violations } = makeCtx({ config: VERSION_MISSING_CONFIG, packageVersion: null });
     await configVersion.check(ctx);
     expect(violations.some((v) => /'version' is required/.test(v.message))).toBe(true);
+  });
+
+  it('still enforces the semver shape when package.json yields no version', async () => {
+    const { ctx, violations } = makeCtx({ config: VERSION_MALFORMED_CONFIG, packageVersion: null });
+    await configVersion.check(ctx);
+    expect(violations.some((v) => /'version' must be a semver string/.test(v.message))).toBe(true);
   });
 });
 
@@ -326,7 +333,7 @@ describe('config-shape-valid', () => {
   });
 
   it('fails a namespace whose value is not an object of blocks', async () => {
-    const { ctx, violations } = makeCtx({ config: { version: HARNESS_VERSION, markdown: 'yes' } });
+    const { ctx, violations } = makeCtx({ config: { version: MOCK_HARNESS_VERSION, markdown: 'yes' } });
     await shapeValid.check(ctx);
     expect(violations.some((v) => /'markdown' must be a namespace object holding config blocks/.test(v.message))).toBe(
       true,
@@ -371,7 +378,7 @@ describe('config-shape-valid', () => {
   });
 
   it('fails a declared block that is not a JSON object', async () => {
-    const { ctx, violations } = makeCtx({ config: { version: HARNESS_VERSION, markdown: { frontmatter: 'x' } } });
+    const { ctx, violations } = makeCtx({ config: { version: MOCK_HARNESS_VERSION, markdown: { frontmatter: 'x' } } });
     await shapeValid.check(ctx);
     expect(violations.some((v) => /'markdown.frontmatter' must be a JSON object/.test(v.message))).toBe(true);
   });
