@@ -95,8 +95,16 @@ An archgate ADR under `.archgate/adrs/` (`type: adr`) with an executable `*.rule
 _Avoid_: meta-ADR; bare "ADR" (ambiguous — always qualify)
 
 **Core governance bundle** ("core"):
-The foundational system-governance ADR set — GEN-001 through GEN-009 (GEN-001–003 exist; GEN-004–009 reserved/WIP) — installed *intrinsically* by the archgate Integration with no sub-option prompt. A **Tool-owned** set: every file is fully overwritten on each run (each ADR's `.md` + `.rules.ts` + `.rules.test.ts`, plus the supporting type/fixture files and `.claude/rules` symlinks). Distinct from the Harness config (`.typescript-ai-harness.json`), which rides along Seeded (write-once). A future sub-option list holds *optional* bundles; core is never in it.
+The foundational Governance ADR set the harness ships, installed *intrinsically* by the archgate Integration with no sub-option prompt. Membership is the explicit `ADR_CORE` list in the Harness build config — `GEN-001`/`GEN-002`/`GEN-003` today; the `GEN-001`–`GEN-009` range is reserved for foundational governance. A **Tool-owned** set: every file is fully overwritten on each run (each ADR's `.md` + `.rules.ts` + `.rules.test.ts`, plus the supporting type/fixture files and `.claude/rules` symlinks). Distinct from the Harness config (`.typescript-ai-harness.json`), which rides along Seeded (write-once). A future sub-option list holds *optional* bundles; core is never in it.
 _Avoid_: core ADRs (ambiguous), foundational pack, general governance
+
+**Harness build config** (`harness.config.json`):
+The root, Tool-owned build-metadata file naming what the harness ships — `ADR_CORE` (the Core governance bundle's ADR ids), the curated supporting-files list, and the pinned `ARCHGATE_VERSION`. Read by the release-time capture step and by the CLI on self-apply; **never shipped to a Target** (the Target receives the materialised Bundle asset, not this file). Distinct from the Harness config (`.typescript-ai-harness.json`, target-facing, GEN-002-owned) and from archgate's own `.archgate/config.json`.
+_Avoid_: manifest (retired), harness config (that is the target-facing runtime file)
+
+**Bundle asset** ("capture"):
+The committed, derived copy of the Core governance bundle that travels with the CLI, captured from the canonical `.archgate/adrs/` (+ supporting) files by the release-time capture step. The CLI writes it into a Target's `.archgate/**` with overwrite (Tool-owned) and mints the `.claude/rules/` symlinks. Never hand-edited — the capture is scripted and CI-gated, so it cannot drift from the canonical source. On self-apply the asset equals its source, so writing is a byte-identical no-op — the dogfood proof that the update mechanism works.
+_Avoid_: template (reserved for the string-template model), snapshot (reserved for archgate's config/settings capture, ADR-0005)
 
 ## Evals
 

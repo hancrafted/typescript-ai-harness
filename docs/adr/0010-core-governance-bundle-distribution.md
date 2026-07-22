@@ -1,0 +1,96 @@
+---
+type: design-adr
+title: "Core governance bundle: capture, seed, and self-apply"
+description: "How the harness ships its foundational Governance ADRs into a Target: canonical source in .archgate/, a captured asset, Tool-owned replacement, and a version-gated config seed."
+---
+
+# Core governance bundle distribution: canonical source, captured asset, Tool-owned replacement
+
+The harness now installs its foundational **Governance ADRs** — the **Core governance bundle** — into a **Target project** through the archgate Integration. This ADR owns *how the bundle travels and is written*; [ADR-0005](./0005-archgate-integration.md) owns the archgate Integration behaviour that invokes it, and GEN-001/002/003 own what the ADRs themselves say.
+
+The first consumer is this repo (self-application, ADR-0003); arbitrary Target support is the same code path, with two knowns explicitly deferred (§6, §7).
+
+## 1. Single source of truth, captured — not templated, not symlinked
+
+The canonical bundle stays authored and governed exactly where it lives today: `.archgate/adrs/`. GEN-001 self-hosts there, the `.claude/rules/` symlinks resolve there, and the prose reviews (#38) run there. A scripted, CI-gated **capture** step stages those files into a committed **Bundle asset** that travels with the CLI; the CLI writes the asset into a Target.
+
+Rejected alternatives:
+
+- **Templates-as-strings** (today's `template.ts` model). Fine for a two-line config; impractical and drift-prone for ~150 KB across a growing ADR tree, and the shipped copy would silently diverge from the canonical, governed ADRs.
+- **Templates-as-source** (ADR-0003's literal model, with `.archgate/adrs/` as generated output). It relocates the crown-jewel ADRs *outside* the contract that governs them — no GEN-001 in context on Read, no live `archgate check`, no prose gate — until re-materialised.
+- **Symlinking the canonical files into a template tree.** Blocked on a hard fact: archgate's file reader does not follow symlinks (`ctx.readFile` throws on one — the very mechanic `adr-claude-rules-symlink` relies on). A symlinked `.archgate/adrs/` file is unreadable by `archgate check`, so the ADR errors or goes undiscovered.
+
+The capture is never hand-edited, so it cannot drift; on self-application the asset equals its source, so writing it back is a byte-identical no-op.
+
+## 2. Membership is data — `ADR_CORE` in the Harness build config
+
+A new root, Tool-owned **`harness.config.json`** (the **Harness build config**) names what the harness ships. It is build metadata, read by the capture step and by the CLI on self-apply, and is **never shipped to a Target** (the Target receives the materialised asset, not this file). It is distinct from `.archgate/config.json` (archgate's own) and `.typescript-ai-harness.json` (the target-facing runtime config, GEN-002-owned).
+
+- **`ADR_CORE`** is the explicit, ordered list of core ADR ids — `["GEN-001", "GEN-002", "GEN-003"]` today. The `GEN-001`–`GEN-009` range is reserved for foundational governance; promoting a new one into core is a one-line edit here, not a CLI code change.
+- The file also holds the curated **supporting-files** list (§3) and the pinned **`ARCHGATE_VERSION`** (today a constant buried in `template.ts`), so "what core ships" is one readable file.
+
+Membership is deliberately an explicit list, not a glob of whatever `GEN-*` exists, so a half-finished ADR cannot leak into a release.
+
+## 3. What core writes — the whole bundle, forced by GEN-001
+
+"Three ADRs" is three *bundles*. GEN-001's own rules make the following mandatory members — omitting any fails `archgate check` in the Target:
+
+- **Per core ADR:** its `.md` + `.rules.ts` + `.rules.test.ts` (`adr-rules-test-sibling` requires the sibling to exist) + a real `.claude/rules/<name>.md` symlink (`adr-claude-rules-symlink`, for any non-empty `paths:`).
+- **Supporting files:** `harness-config-core.d.ts`, `harness-config-extension.d.ts` (GEN-002/003 reference them), the shared fixtures (§7), and `frontmatter-config.md`.
+
+The Target footprint is confined to `.archgate/**` plus the `.claude/rules/` symlinks — core does not bleed into the Target's `test/` tree (§7). Core does **not** force-install vitest: the `.rules.test.ts` files are archgate-satisfying artifacts a Target *may* run if it also selected vitest.
+
+## 4. Lifecycle: Tool-owned bundle, Seeded config, self-apply as the proof
+
+- The bundle is a **Tool-owned** set — every file overwritten on each run, full replacement including `.rules.ts` and `.rules.test.ts`. This is how a brownfield Target (this repo included) is brought up to the current governance release.
+- `.typescript-ai-harness.json` is a **Seeded config file** — written once if absent, never patched on re-run (GEN-002 §1.2); the migrate/update flow is #11.
+- **Definition of done for the update mechanism:** running the CLI on this repo rewrites its own bundle byte-for-byte, yielding a clean `git diff`. There is no skip-self guard — the dogfood *is* the test that the overwrite path works and is idempotent.
+
+## 5. Two new declarative Action kinds
+
+`apply()` stays the single IO chokepoint (ADR-0004). Two `Action` kinds are added:
+
+- **`copyAsset`** — copy a file (sub)tree from the CLI's bundled asset into the Target.
+- **`symlink`** — create a relative symlink. **Real-symlink-only; never a copy fallback.** A copied body would invert `adr-claude-rules-symlink` (archgate can open a copy → the rule fails), turning every ADR into a false violation. On a platform/permission where `fs.symlink` fails (Windows without Developer Mode/admin), the action errors loudly with a post-run note — it does not silently degrade. Full Windows support is **deferred** to the target-matrix / Dockerized-e2e work (#4).
+
+## 6. Config seed — portable default, version-gated
+
+The seed materialises GEN-003's portable built-in `DEFAULT_CONFIG` (the 4 root-or-specific entries) plus the `version` stamp — **not** this repo's richer 8-entry config, whose project-specific `docs/adr`→`design-adr` / `docs/agents`→`agent-doc` / `.claude/agents`→`agent` / `CONTEXT.md` entries are the repo-specific surface #14 carves out and offers separately. Seeding is therefore a behaviour no-op: it materialises, visibly and editably, exactly the policy GEN-003 already applies when the file is absent.
+
+Known limitation, accepted and deferred: `config-version` compares the seeded `version` against the **Target's own** root `package.json` `.version`. On this repo the harness *is* the package, so they coincide; in a foreign Target they diverge and `archgate check` errors until #11 corrects the version envelope (to compare against the installed harness release). A post-run note explains a version mismatch rather than leaving it mysterious.
+
+Because GEN-003's `DEFAULT_CONFIG` is hardcoded in its `rules.ts` (archgate rules cannot import) and the CLI's seed is separate code, a keep-honest test asserts the CLI seed equals `DEFAULT_CONFIG` — the same shared-source discipline GEN-002/003 already use.
+
+## 7. Fixtures relocation
+
+Both `*.rules.test.ts` currently import shared fixtures from `test/fixtures/` — a path that, in a Target, resolves outside `.archgate/`. To keep core self-contained, the shared fixtures move under `.archgate/` and the two imports are repointed. This is a small change made here under live governance, and it lines up with the `#490` "`.archgate`-contained shared helper imports" thread. Tests (not rules) do the importing, so archgate's no-imports constraint on rules files is untouched.
+
+## Consequences
+
+**Positive:**
+
+- One canonical byte-source per file, still fully governed by the contract it defines; no second hand-maintained copy to drift.
+- Adding a foundational ADR is a one-line `ADR_CORE` edit; the capture picks it up on the next release.
+- Both install modes become deterministic and idempotent (see ADR-0005 v4), so self-application is a reliable dogfood signal.
+- A brownfield Target is brought to the current governance release in one run.
+
+**Negative:**
+
+- The published package grows beyond `dist/`: the asset must be staged and kept fresh by a prepack step, CI-gated so it cannot lag the canonical source.
+- The config seed is knowingly broken-on-arrival for a foreign Target whose app version differs, until #11 — the ADR bundle still installs correctly.
+- Windows symlink creation is unsupported until the deferred target-matrix work; the failure is loud, not silent.
+- A copied-body fallback for symlinks is deliberately unavailable, so a symlink failure blocks that part of the install rather than producing a subtly-wrong result.
+
+## History
+
+- **v1 (this ADR):** establishes the capture model, `harness.config.json`/`ADR_CORE`, Tool-owned bundle replacement with Seeded config, the `copyAsset`/`symlink` Action kinds, and the version-gated seed. Realises GEN-002's deferred "Templates/scaffolding" note.
+
+## References
+
+- [archgate Integration (ADR-0005)](./0005-archgate-integration.md) — the Integration behaviour (v4: unified direct-write) that invokes core.
+- [Self-hosting scaffolder (ADR-0003)](./0003-self-hosting-scaffolder.md) — templates-as-source, amended here for the core bundle.
+- [Integration contract (ADR-0004)](./0004-integration-contract.md) — the `Action` model the two new kinds extend.
+- [Harness Config (GEN-002)](../../.archgate/adrs/GEN-002-harness-config.md) — the config envelope, version rule, and its deferred scaffolding note.
+- [Frontmatter Contract (GEN-003)](../../.archgate/adrs/GEN-003-frontmatter.md) — the `DEFAULT_CONFIG` the seed materialises.
+- [ADR Contract (GEN-001)](../../.archgate/adrs/GEN-001-adr.md) — forces the bundle's membership (test sibling, `.claude/rules` symlink) and the symlink-not-copy mechanic.
+- Deferred / linked: [#11](https://github.com/hancrafted/typescript-ai-harness/issues/11) (version-in-target + migrate), [#14](https://github.com/hancrafted/typescript-ai-harness/issues/14) (offered design-adr disambiguation), [#490 archgate](https://github.com/archgate) (fixtures relocation), [#4](https://github.com/hancrafted/typescript-ai-harness/issues/4) (Windows + e2e).

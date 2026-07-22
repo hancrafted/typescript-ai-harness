@@ -1,44 +1,47 @@
 ---
 type: design-adr
 title: "archgate Integration"
-description: "Install archgate in a hybrid model: an interactive init for humans and a headless direct-write snapshot for automated runs."
+description: "Install archgate by deterministic direct-write in both modes — no interactive init shell-out — seeding archgate's config/settings and the core governance bundle."
 ---
 
-# archgate Integration: hybrid — interactive `init`, headless direct-write snapshot
+# archgate Integration: deterministic direct-write (v4)
 
-archgate ships an `init` command but exposes **no non-interactive contract** — there is no `--yes`/`--no-input`, and `--editor <value>` suppresses only the editor prompt. With a TTY attached, `archgate init` opens an interactive session and installs a Claude plugin into the global `~/.claude`; with stdin detached it runs *uncontrolled*, picking defaults and mutating machine-global state. A scaffolder that must run under `--yes` therefore cannot delegate to it.
+archgate ships an `init` command but exposes **no non-interactive contract** — no `--yes`/`--no-input`, and `--editor <value>` suppresses only the editor prompt. Earlier versions of this Integration therefore ran a **hybrid**: shell out to `npx archgate init` when a human was present, direct-write a snapshot when headless (`--yes`). See History for why that was the right call at the time.
 
-But that constraint only bites headless. When a human is present, archgate's own onboarding — editor prompt, plugin login, example ADR — is exactly what you want. So the archgate Integration is **hybrid, split on the `--yes` flag**:
+**v4 retires the shell-out entirely. Both modes now direct-write, deterministically.** Two things changed the calculus:
 
-- **Interactive (no `--yes`):** shell out to `npx archgate init`. A TTY is present, so archgate drives its full native onboarding. The tool passes no `--editor` — archgate owns that prompt.
-- **Headless (`--yes`):** write a controlled snapshot directly, as Tool-owned/Seeded files — the model every other Integration uses — so the run completes with no TTY, no prompt, and no global side effects.
+1. **The harness now ships a governed Core governance bundle** ([ADR-0010](./0010-core-governance-bundle-distribution.md)). `archgate init` seeds an *example ADR* that almost certainly violates GEN-001's shape rules (numbered anchors, twin rule markers, six exact sections, test sibling, symlink…), so `archgate check` would fail on a file archgate itself wrote — into the very directory core owns. archgate exposes no flag to suppress it.
+2. **`npx archgate init` is network- and environment-fragile.** It fetches over the network and installs a global Claude plugin into `~/.claude`; a corporate proxy (Zscaler, reported on a locked-down Windows machine) blocks it, so the interactive path was already silently broken there. Everything else `init` did deterministically — write `.archgate/config.json` and `.claude/settings.local.json` — the headless path already did itself.
 
-The `--yes` flag is threaded into the plan context (`Ctx.yes`); `archgate.plan()` branches on it. No other Integration needs it.
+The `--yes` flag still threads into the plan context (`Ctx.yes`), but archgate no longer branches on it for *what* to write; both modes write the same deterministic surface.
 
-## What the headless (`--yes`) path writes (against `archgate@^0.50.0`, editor `claude`)
+## What the direct-write path writes (against the pinned archgate version, editor `claude`)
 
-- `.archgate/config.json` — **Seeded config file** (written once, never clobbered): `{"domains":{}, "baseBranch":"origin/main"}`. The five ADR domains (`architecture`/`backend`/`data`/`frontend`/`general` → ARCH/BE/DATA/FE/GEN) are archgate built-ins, available with zero config, so they are **not** written into `domains`. `baseBranch` is a static `origin/main` — branch detection is not reintroduced at apply time.
-- `.claude/settings.local.json` — **Seeded config file**: archgate's Claude settings (the `archgate:developer` agent + allowed archgate skills), verbatim as `init` emits them.
-- `.archgate/adrs/.gitkeep` — an **empty ADR directory**, kept under git with `.gitkeep`. `archgate check` treats the presence of `.archgate/adrs/` (not `config.json`) as the "initialised workspace" marker: without it, `check` aborts with `error: No .archgate/ directory found`. Seeding the empty directory makes a fresh Target pass `check` with zero ADRs, so `archgate check` in `verify` is green from the first run (US-16). No ADR *content* is written — the directory starts clean (US-9).
-- `.gitignore` += `.archgate/rules.d.ts` — append-only (the shared-ignore-file model).
+- **The Core governance bundle** — the `ADR_CORE` ADRs and their supporting files, written **Tool-owned** (overwrite) into `.archgate/**`, plus the `.claude/rules/` symlinks. Owned by ADR-0010; this Integration invokes it.
+- `.archgate/config.json` — **Seeded config file** (write-if-absent): `{"domains":{}, "baseBranch":"origin/main"}`. The five built-in ADR domains (ARCH/BE/DATA/FE/GEN) need no config; `baseBranch` is a static `origin/main`.
+- `.claude/settings.local.json` — **Seeded config file**: the `archgate:developer` agent + allowed archgate skills, verbatim.
+- `.typescript-ai-harness.json` — **Seeded config file**: GEN-003's portable default, version-stamped (ADR-0010 §6).
+- `.gitignore` += `.archgate/rules.d.ts` — append-only.
 
-Deliberately **not** written on the headless path: `rules.d.ts` (`@generated` and gitignored — `archgate check`, already the first step of `verify`, regenerates it); an example ADR (a Target authors its own via the archgate workflow — the `adrs/` directory is seeded, but empty); the `lint/` placeholder directory (an unused, doc-only slot — `archgate check` tolerates its absence). The global `~/.claude/plugins` install is dropped; a one-line post-run note points the user to `archgate plugin install`.
+Deliberately **not** written: `rules.d.ts` (`@generated` by `archgate check`, the first step of `verify`); the `lint/` placeholder; the empty `.archgate/adrs/.gitkeep` (retired — core writes real, governed ADRs). The global `~/.claude` plugin install is dropped; a one-line post-run note points the user to `archgate plugin install`.
 
-## editor sub-option
+## editor
 
-The tool carries **no** editor sub-option in either mode. Interactive runs delegate the editor choice to `archgate init`'s own prompt; the headless snapshot is fixed to **claude**. The other editors (`cursor`/`vscode`/`copilot`/`opencode`) are a reserved, deferred slot for a per-editor headless snapshot.
+Fixed to **claude** in both modes. Interactive users no longer get archgate's editor prompt; the other editors (`cursor`/`vscode`/`copilot`/`opencode`) remain a reserved, deferred slot for per-editor snapshots. This matches the first consumer (this repo) and the prior headless behaviour.
 
 ## Consequences
 
-- **The two modes produce different scaffolding — this is deliberate.** Interactive `archgate init` seeds an example ADR and `lint/`, installs the global Claude plugin (and may prompt for `archgate login`), and derives `baseBranch` from the repo; the headless snapshot does none of that and pins `baseBranch` to `origin/main`. Each mode is internally deterministic, but a dev's interactive setup will not byte-match CI's headless one. The headless snapshot is captured to *approximate* `init`'s output, not to reproduce it exactly.
-- The headless snapshot is **version-coupled** to archgate. Both modes install `archgate@^0.50.0` (behind a single version constant) so `check` / config behaviour matches the snapshot. Pinning is a deliberate deviation from the "install latest" convention, justified because the snapshot is captured against a specific version.
-- Snapshot rot is otherwise mitigated by a **drift test** — real `archgate init` in a temp git repo, diffed against the snapshot (modulo the omitted `rules.d.ts`, the dynamic `baseBranch`, and the dropped plugin install). It needs the archgate binary + network + git, so it is **deferred to #4**'s Dockerized e2e; until then the pin is the mitigation.
-- archgate emits a `runCommand` **only on the interactive path**. The headless path emits none.
-- archgate adds nothing to `package.json` directly; `archgate check` in `verify` / `verify:commit` is owned by husky's cross-Integration composition (ADR-0007) and is unchanged.
-- Running the tool with `--yes` completes with no TTY and no interactive prompt end-to-end, unblocking the scheduled Dockerized e2e (#4).
+- **Both modes are now deterministic and idempotent.** A dev's setup byte-matches CI's; self-application rewrites the bundle byte-for-byte (ADR-0010's dogfood definition-of-done). The cross-mode divergence that v3 accepted is gone.
+- **Interactive users lose archgate's native onboarding** — no editor prompt, no in-`init` plugin install. The plugin is one noted command (`archgate plugin install`); governance (`archgate check`, a devDep binary) works without it.
+- **The Zscaler failure mode leaves the setup path.** The post-run `archgate plugin install`, and `npx`/`archgate check` themselves, may still be proxy-affected — that is the plugin/binary's concern, and it lands with the deferred Windows posture (#4), not the CLI's install run.
+- The Dependency stays **version-pinned** (single `ARCHGATE_VERSION`, now surfaced in `harness.config.json` per ADR-0010) so `check`/config behaviour matches the seeded snapshot.
+- Snapshot rot is mitigated by the deferred drift test (real `archgate init` diffed against the snapshot) — network + binary + git, so **deferred to #4**'s Dockerized e2e; until then the pin is the mitigation.
+- archgate emits **no `runCommand`** in either mode now; the `runCommand` Action kind survives for husky.
+- `package.json` is untouched by archgate directly; `archgate check` in `verify` / `verify:commit` is husky's cross-Integration composition (ADR-0007), unchanged.
 
 ## History
 
-- **v1 (superseded, #5):** always shelled out to `npx archgate init --editor <editor>`, and introduced the `runCommand` Action kind. Superseded because the shell-out could not run headless (no non-interactive contract) and silently mutated global `~/.claude`.
-- **v2 (superseded, #5):** always direct-wrote the snapshot, never shelling out — chosen so `--yes` could run unattended and controlled. Superseded because it also removed the full native onboarding for the *interactive* case, where a TTY is present and archgate's own `init` (plugin, editor choice, example ADR) is the better experience.
-- **v3 (current, #5 follow-up):** hybrid — direct-write when headless (`--yes`), shell out to `npx archgate init` when interactive. Keeps the hard requirement that `--yes` run unattended and controlled, while giving interactive users archgate's native onboarding. Restores archgate's use of the `runCommand` kind on the interactive path only. The cross-mode divergence above is the accepted cost.
+- **v1 (superseded, #5):** always shelled out to `npx archgate init --editor <editor>`; introduced the `runCommand` Action kind. Superseded because the shell-out could not run headless and silently mutated global `~/.claude`.
+- **v2 (superseded, #5):** always direct-wrote the snapshot, never shelling out — so `--yes` could run unattended. Superseded because it also removed native onboarding for the *interactive* case, where a TTY is present and archgate's own `init` was then the better experience.
+- **v3 (superseded, this change):** hybrid — direct-write when headless, shell out to `npx archgate init` when interactive. The right balance *before* the harness shipped its own governed ADRs.
+- **v4 (current):** retire the shell-out; unified deterministic direct-write in both modes, now including the Core governance bundle (ADR-0010). Superseded v3 because `archgate init`'s example ADR conflicts with GEN-001, the network/plugin onboarding is Zscaler-fragile, and everything else `init` did is done deterministically here. Editor fixed to `claude`; plugin via post-run note.
