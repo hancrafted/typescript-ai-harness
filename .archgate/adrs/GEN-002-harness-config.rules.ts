@@ -1,26 +1,78 @@
 /// <reference path="../rules.d.ts" />
+/// <reference path="../harness-config-core.d.ts" />
 
-// GEN-002 — Harness Config: guards the shape of the root harness config
-// `.typescript-ai-harness.json`. One rule, `frontmatter-config-valid`, validates
-// the `adr.frontmatter` block — pathRules array, per-entry match / allowedTypes /
-// label / severity / requireDescription / caps, unmatched, draftEscape — so a malformed config
-// surfaces as an error rather than silently disabling the floor. The rule
-// DECLARES the error tier per GEN-001 §7 and no-ops when the config file or its
-// adr.frontmatter block is absent, so the contract is safe to ship pre-seed. The
-// floor that consumes this config lives in GEN-003.
+// GEN-002 — Harness Config: the envelope contract for the root harness config
+// `.typescript-ai-harness.json`. Four rules guard the file's integrity while
+// staying fully domain-blind — this file hardcodes NO namespace and NO block
+// name; the legal keys come from the block owners' own fences:
+//   - `config-json-parses`: a present file MUST be parseable JSON — a syntax
+//     error is an error, never a silent fall-back to defaults.
+//   - `config-extension-fenced`: the config extension
+//     `.archgate/harness-config-extension.d.ts` follows the fence grammar —
+//     balanced `<ADR-ID>-START`/`-END` markers, each START declaring one
+//     well-formed, unique `namespace.block` path. The union of declared paths
+//     is the config's closed set of legal keys (the registry lives in the
+//     extension file the block owners edit, never here).
+//   - `config-version`: the top-level `version` is a semver string exactly
+//     matching the installed harness release (`package.json` `.version`).
+//   - `config-shape-valid`: the config is `{version, [namespace]: {[block]:
+//     ConfigBlock}}` — every present `namespace.block` key matches a declared
+//     fence path, sits exactly two key levels deep, and satisfies the generic
+//     spine; `rule` payloads and `settings` contents stay opaque (their
+//     schemas belong to the block's owning ADR).
+// All rules DECLARE the error tier per GEN-001 §7 and no-op when the config
+// file is absent, so the contract ships pre-seed.
 const CONFIG_PATH = '.typescript-ai-harness.json';
+const PACKAGE_JSON = 'package.json';
+const EXTENSION_DTS = '.archgate/harness-config-extension.d.ts';
 
-const VALID_LABELS = ['name', 'title'];
-// The tiers a pathRules entry may declare. Written as a bare list — never as a
+// The envelope's single reserved top-level key; every other top-level key is a
+// namespace holding blocks.
+const VERSION_KEY = 'version';
+
+// The practical core of the semver grammar — enough to keep the stamp's shape
+// honest even when package.json yields nothing to compare against.
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+// The fence grammar of the config extension. A marker line is
+// `// <ADR-ID>-START: <namespace.block>` or `// <ADR-ID>-END`; the loose
+// marker scan catches malformed variants so they error instead of being
+// silently ignored, and the path grammar is two camelCase identifiers joined
+// by a dot. Read by regex, never by parsing TypeScript.
+const FENCE_MARKER_RE = /^[ \t]*\/\/[ \t]*([A-Z][A-Z0-9]*-\d+)-(START|END)(.*)$/;
+const FENCE_PATH_RE = /^:[ \t]*([a-z][a-zA-Z0-9]*\.[a-z][a-zA-Z0-9]*)[ \t]*$/;
+
+const VALID_UNMATCHED = ['exempt', 'error'];
+// The tiers a pathRules entry may declare. A bare list — never a
 // `severity:`-prefixed literal — so GEN-001's adr-error-tier scan does not read
 // this rules file as declaring a non-error rule.
 const VALID_ENTRY_TIERS = ['error', 'warning'];
-const VALID_UNMATCHED = ['exempt'];
 
-// A kebab-case token: lowercase alphanumerics in one-or-more hyphen-joined
-// segments (e.g. `adr`, `design-adr`, `agents-md`).
-const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+// The generic spine: closed key sets at block, FileSet and entry level.
+const BLOCK_KEYS = ['unmatched', 'coverage', 'settings', 'pathRules'];
+const FILESET_KEYS = ['include', 'exclude'];
+const ENTRY_KEYS = ['include', 'exclude', 'exempt', 'severity', 'rule'];
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// A FileSet list: non-empty array of non-empty glob strings.
+function isGlobArray(v: unknown): boolean {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0);
+}
+
+async function tryReadFile(ctx: RuleContext, path: string): Promise<string | null> {
+  try {
+    return await ctx.readFile(path);
+  } catch {
+    return null;
+  }
+}
+
+// The parsed config, or null when the file is absent or unparseable — the
+// version and shape rules no-op on null (`config-json-parses` owns a present
+// file that fails to parse).
 async function tryReadJSON(ctx: RuleContext, path: string): Promise<unknown> {
   try {
     return await ctx.readJSON(path);
@@ -29,126 +81,289 @@ async function tryReadJSON(ctx: RuleContext, path: string): Promise<unknown> {
   }
 }
 
-// The `adr.frontmatter` block of the harness config, or null when the config —
-// or that block — is absent or the wrong shape. The rule keys its no-op off a
-// null here.
-function frontmatterConfig(config: unknown): Record<string, unknown> | null {
-  if (!config || typeof config !== 'object') return null;
-  const adr = (config as Record<string, unknown>).adr;
-  if (!adr || typeof adr !== 'object') return null;
-  const fm = (adr as Record<string, unknown>).frontmatter;
-  if (!fm || typeof fm !== 'object') return null;
-  return fm as Record<string, unknown>;
+// The installed harness release — the version the config must match. Null when
+// package.json is unreadable or carries no version string; the comparison is
+// then impossible and skipped (never guessed), but presence and shape of the
+// config's own stamp are still enforced.
+async function harnessVersionOf(ctx: RuleContext): Promise<string | null> {
+  const pkg = await tryReadJSON(ctx, PACKAGE_JSON);
+  return isRecord(pkg) && typeof pkg.version === 'string' ? pkg.version : null;
 }
 
-function isPositiveInt(n: unknown): boolean {
-  return typeof n === 'number' && Number.isInteger(n) && n > 0;
+// Emits one violation; the caller's emit closes over the rule's provenance tag.
+type Emit = (message: string) => void;
+
+// One fence of the config extension: the owning ADR id and its declared
+// `namespace.block` path.
+interface Fence {
+  id: string;
+  path: string;
 }
 
-function isMatch(m: unknown): boolean {
-  if (typeof m === 'string') return m.length > 0;
-  return Array.isArray(m) && m.length > 0 && m.every((x) => typeof x === 'string' && x.length > 0);
+// Walk the extension source line by line, reporting every grammar problem via
+// emit and returning the well-formed fences. `config-shape-valid` re-parses
+// without an emit — malformed fences contribute no declared path there; the
+// fence rule carries the loud errors.
+function parseFences(source: string, emit?: Emit): Fence[] {
+  const fences: Fence[] = [];
+  let open: { id: string; line: number } | null = null;
+  const lines = source.split('\n');
+  for (let index = 0; index < lines.length; index++) {
+    const marker = lines[index].match(FENCE_MARKER_RE);
+    if (!marker) continue;
+    const [, id, kind, rest] = marker;
+    const at = `line ${index + 1}`;
+    if (kind === 'START') {
+      if (open !== null) {
+        emit?.(
+          `fence '${id}' at ${at} opens inside the unclosed '${open.id}' fence from line ${open.line} — fences never nest or overlap`,
+        );
+      }
+      open = { id, line: index + 1 };
+      const path = rest.match(FENCE_PATH_RE);
+      if (path === null) {
+        emit?.(
+          `fence '${id}' at ${at} must declare its block path — '// ${id}-START: <namespace.block>' with exactly one dot`,
+        );
+        continue;
+      }
+      const taken = fences.find((f) => f.path === path[1]);
+      if (taken !== undefined) {
+        emit?.(
+          `fence '${id}' at ${at} re-declares '${path[1]}', already owned by '${taken.id}' — one owning fence per block`,
+        );
+        continue;
+      }
+      fences.push({ id, path: path[1] });
+      continue;
+    }
+    if (rest.trim() !== '') {
+      emit?.(`fence '${id}' at ${at} has trailing content after the END marker — '// ${id}-END' closes bare`);
+    }
+    if (open === null) {
+      emit?.(`fence '${id}' at ${at} closes without a matching '${id}-START'`);
+      continue;
+    }
+    if (open.id !== id) {
+      emit?.(
+        `fence '${id}' at ${at} closes the open '${open.id}' fence from line ${open.line} — START and END must carry the same ADR id`,
+      );
+    }
+    open = null;
+  }
+  if (open !== null) {
+    emit?.(`fence '${open.id}' from line ${open.line} is never closed — add '// ${open.id}-END'`);
+  }
+  return fences;
 }
 
-function isKebabArray(a: unknown): boolean {
-  return Array.isArray(a) && a.every((x) => typeof x === 'string' && KEBAB_RE.test(x));
+// The closed set of legal `namespace.block` config keys, derived from the
+// extension file's well-formed fences. Empty when the file is absent — a
+// config key can then match nothing, which is exactly right: no fence, no
+// block.
+async function declaredPathsOf(ctx: RuleContext): Promise<Set<string>> {
+  const source = await tryReadFile(ctx, EXTENSION_DTS);
+  return new Set(source === null ? [] : parseFences(source).map((f) => f.path));
 }
 
-function validatePathRule(ctx: RuleContext, entry: unknown, index: number): void {
-  const where = `pathRules[${index}]`;
-  if (!entry || typeof entry !== 'object') {
-    ctx.report.violation({
-      message: `Harness config ${where} must be an object (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+// FileSet fields shared by coverage and pathRules entries: include required,
+// exclude optional, both non-empty arrays of non-empty globs.
+function checkFileSetFields(emit: Emit, where: string, obj: Record<string, unknown>): void {
+  if (!isGlobArray(obj.include)) {
+    emit(`'${where}.include' must be a non-empty array of non-empty glob strings`);
+  }
+  if (obj.exclude !== undefined && !isGlobArray(obj.exclude)) {
+    emit(`'${where}.exclude' must be a non-empty array of non-empty glob strings — omit it or list at least one glob`);
+  }
+}
+
+function checkCoverage(emit: Emit, where: string, block: Record<string, unknown>): void {
+  if (block.unmatched === 'error' && block.coverage === undefined) {
+    emit(`'${where}' declares unmatched: 'error', which requires a coverage FileSet naming the governed universe`);
+  }
+  if (block.coverage !== undefined && block.unmatched !== 'error') {
+    emit(`'${where}.coverage' is only meaningful with unmatched: 'error' — remove it or declare that posture`);
+  }
+  if (block.coverage === undefined) return;
+  if (!isRecord(block.coverage)) {
+    emit(`'${where}.coverage' must be a FileSet object`);
     return;
   }
-  const rule = entry as Record<string, unknown>;
-  if (!isMatch(rule.match)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.match must be a non-empty glob string or array of glob strings (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  for (const key of Object.keys(block.coverage)) {
+    if (!FILESET_KEYS.includes(key)) {
+      emit(`'${where}.coverage.${key}' is not a FileSet key — a FileSet is {include, exclude}`);
+    }
   }
-  if (rule.exempt !== undefined && typeof rule.exempt !== 'boolean') {
-    ctx.report.violation({
-      message: `Harness config ${where}.exempt must be a boolean (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  checkFileSetFields(emit, `${where}.coverage`, block.coverage);
+}
+
+function checkEntrySpine(emit: Emit, where: string, entry: unknown): void {
+  if (!isRecord(entry)) {
+    emit(`'${where}' must be an object`);
+    return;
   }
-  if (rule.allowedTypes !== undefined && !isKebabArray(rule.allowedTypes)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.allowedTypes must be an array of kebab-case type strings (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  for (const key of Object.keys(entry)) {
+    if (!ENTRY_KEYS.includes(key)) {
+      emit(
+        `'${where}.${key}' is not a spine entry key — entries are {include, exclude, exempt, severity, rule}; block-owned policy goes under 'rule'`,
+      );
+    }
   }
-  if (rule.label !== undefined && !VALID_LABELS.includes(rule.label as string)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.label must be 'name' or 'title' (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  checkFileSetFields(emit, where, entry);
+  if (entry.exempt !== undefined && typeof entry.exempt !== 'boolean') {
+    emit(`'${where}.exempt' must be a boolean`);
   }
-  if (rule.severity !== undefined && !VALID_ENTRY_TIERS.includes(rule.severity as string)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.severity must be 'error' or 'warning' (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  if (entry.exempt === true && entry.rule !== undefined) {
+    emit(`'${where}' is exempt — an exempt entry claims and waives, it must not carry 'rule'`);
   }
-  if (rule.requireDescription !== undefined && typeof rule.requireDescription !== 'boolean') {
-    ctx.report.violation({
-      message: `Harness config ${where}.requireDescription must be a boolean (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  if (entry.exempt === true && entry.severity !== undefined) {
+    emit(`'${where}' is exempt — an exempt entry claims and waives, it must not carry 'severity'`);
   }
-  if (rule.maxTag !== undefined && !isPositiveInt(rule.maxTag)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.maxTag must be a positive integer (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  if (entry.severity !== undefined && !VALID_ENTRY_TIERS.includes(entry.severity as string)) {
+    emit(`'${where}.severity' must be 'error' or 'warning'`);
   }
-  if (rule.maxLabel !== undefined && !isPositiveInt(rule.maxLabel)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.maxLabel must be a positive integer (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+  if (entry.rule !== undefined && !isRecord(entry.rule)) {
+    emit(`'${where}.rule' must be a JSON object (its schema belongs to the block's owning ADR)`);
   }
-  if (rule.maxDescription !== undefined && !isPositiveInt(rule.maxDescription)) {
-    ctx.report.violation({
-      message: `Harness config ${where}.maxDescription must be a positive integer (GEN-002 [frontmatter-config-valid]).`,
-      file: CONFIG_PATH,
-    });
+}
+
+// The generic, domain-blind spine of one config block. Doubles as the depth
+// guard: a block is a ConfigBlock exactly two key levels deep, so a third
+// nesting level fails the closed key set. Never inspects inside `rule` or
+// `settings` — those belong to the block's owner.
+function checkBlockSpine(emit: Emit, where: string, block: Record<string, unknown>): void {
+  for (const key of Object.keys(block)) {
+    if (!BLOCK_KEYS.includes(key)) {
+      emit(
+        `'${where}.${key}' is not a spine key — a block is {unmatched, coverage, settings, pathRules}, exactly two key levels deep (namespace.block); block-owned knobs go under 'settings', never a deeper nesting level`,
+      );
+    }
   }
+  if (block.unmatched !== undefined && !VALID_UNMATCHED.includes(block.unmatched as string)) {
+    emit(`'${where}.unmatched' must be 'exempt' or 'error'`);
+  }
+  checkCoverage(emit, where, block);
+  if (block.settings !== undefined && !isRecord(block.settings)) {
+    emit(`'${where}.settings' must be a JSON object (its keys belong to the block's owning ADR)`);
+  }
+  if (!Array.isArray(block.pathRules)) {
+    emit(`'${where}.pathRules' must be an array`);
+    return;
+  }
+  block.pathRules.forEach((entry, index) => checkEntrySpine(emit, `${where}.pathRules[${index}]`, entry));
 }
 
 export default {
   rules: {
-    'frontmatter-config-valid': {
+    'config-json-parses': {
       description:
-        "The harness config's adr.frontmatter block is well-formed: pathRules is an array; each entry has a match glob; optional allowedTypes are kebab strings; label is name|title; the entry severity is error|warning; requireDescription is a boolean; maxLabel/maxDescription/maxTag are positive integers; unmatched and draftEscape are valid. Guards enforcement integrity — a malformed config surfaces as an error rather than silently disabling the floor. No-ops when the config file or its adr.frontmatter block is absent.",
+        'A present harness config .typescript-ai-harness.json MUST be parseable JSON. Closes the silent-degradation hole where a syntax error made every consumer fall back to its built-in default with zero errors — a broken config must fail loudly, not govern silently. No-ops when the file is absent (pre-seed).',
       severity: 'error',
       async check(ctx) {
-        const fm = frontmatterConfig(await tryReadJSON(ctx, CONFIG_PATH));
-        if (fm === null) return; // config or adr.frontmatter absent — nothing to validate
-        if (fm.unmatched !== undefined && !VALID_UNMATCHED.includes(fm.unmatched as string)) {
+        try {
+          await ctx.readFile(CONFIG_PATH);
+        } catch {
+          return; // absent — nothing to parse, the contract ships pre-seed
+        }
+        try {
+          await ctx.readJSON(CONFIG_PATH);
+        } catch {
           ctx.report.violation({
-            message: `Harness config adr.frontmatter.unmatched must be 'exempt' (GEN-002 [frontmatter-config-valid]).`,
+            message: `Harness config exists but is not parseable JSON — fix the syntax error; until it parses, no block governs anything (GEN-002 [config-json-parses]).`,
             file: CONFIG_PATH,
           });
         }
-        if (fm.draftEscape !== undefined && typeof fm.draftEscape !== 'boolean') {
+      },
+    },
+
+    'config-extension-fenced': {
+      description:
+        "The config extension .archgate/harness-config-extension.d.ts follows the fence grammar: each block ADR's region is delimited by '// <ADR-ID>-START: <namespace.block>' and '// <ADR-ID>-END' markers — balanced, never nested or overlapping, END matching the open START's ADR id, closing bare — and every START declares a well-formed namespace.block path, unique across fences. The union of declared paths is the config's closed set of legal keys (consumed by config-shape-valid): the block registry lives in the extension file the block owners edit, so this contract is never amended to register a block. No-ops when the extension file is absent (no fences, no registry).",
+      severity: 'error',
+      async check(ctx) {
+        const emit: Emit = (message) =>
           ctx.report.violation({
-            message: `Harness config adr.frontmatter.draftEscape must be a boolean (GEN-002 [frontmatter-config-valid]).`,
-            file: CONFIG_PATH,
+            message: `Config extension ${message} (GEN-002 [config-extension-fenced]).`,
+            file: EXTENSION_DTS,
           });
-        }
-        if (!Array.isArray(fm.pathRules)) {
-          ctx.report.violation({
-            message: `Harness config adr.frontmatter.pathRules must be an array (GEN-002 [frontmatter-config-valid]).`,
-            file: CONFIG_PATH,
-          });
+        const source = await tryReadFile(ctx, EXTENSION_DTS);
+        if (source === null) return; // absent — a repo with no registered blocks
+        parseFences(source, emit);
+      },
+    },
+
+    'config-version': {
+      description:
+        "The config's top-level `version` is the compatibility envelope: required, a semver-shaped string, exactly equal to the installed harness release (package.json .version) — the honest pre-1.0 semantics where every release may break the format; a mismatch errors naming the migrate step (loosening to semver-range compatibility arrives with it, #11). A config authored for another release is never reinterpreted under this one's semantics. No-ops when the config is absent, unparseable, or has a non-object root (config-shape-valid owns that finding), and skips the equality check — but never the shape check — when package.json yields no version to compare against.",
+      severity: 'error',
+      async check(ctx) {
+        const emit: Emit = (message) =>
+          ctx.report.violation({ message: `Harness config ${message} (GEN-002 [config-version]).`, file: CONFIG_PATH });
+        const config = await tryReadJSON(ctx, CONFIG_PATH);
+        if (config === null || !isRecord(config)) return;
+        const harnessVersion = await harnessVersionOf(ctx);
+        const stamp = config[VERSION_KEY];
+        if (stamp === undefined) {
+          emit(
+            `top-level 'version' is required — stamp the installed harness release${harnessVersion === null ? '' : ` ('${harnessVersion}')`}`,
+          );
           return;
         }
-        fm.pathRules.forEach((entry, index) => validatePathRule(ctx, entry, index));
+        if (typeof stamp !== 'string' || !SEMVER_RE.test(stamp)) {
+          emit(
+            `top-level 'version' must be a semver string matching the installed harness release${harnessVersion === null ? '' : ` ('${harnessVersion}')`}`,
+          );
+          return;
+        }
+        if (harnessVersion !== null && stamp !== harnessVersion) {
+          emit(
+            `'version' is '${stamp}' but the installed harness is '${harnessVersion}' — run the migrate step to upgrade the config and restamp it`,
+          );
+        }
+      },
+    },
+
+    'config-shape-valid': {
+      description:
+        "The config is `{version, [namespace]: {[block]: ConfigBlock}}`, validated domain-blind: every top-level key beside `version` is a namespace object holding blocks; every present `namespace.block` key matches a path some extension fence declares (the typo guard — a misspelled block name errors instead of silently falling back to the block's default, yet no concrete name is hardcoded here); a declared path absent from the config is fine (the owner's built-in default). Each block is a ConfigBlock exactly two key levels deep (the depth guard) satisfying the generic spine: closed block keys {unmatched, coverage, settings, pathRules}; unmatched is 'exempt' or 'error'; a coverage FileSet is present iff unmatched is 'error'; FileSets are {include, exclude} with include a non-empty array of non-empty globs; entries are closed to {include, exclude, exempt, severity, rule}; an exempt entry carries neither rule nor severity; the entry tier is 'error' or 'warning'. The `rule` payload and `settings` contents stay opaque — their schemas belong to the block's owning ADR. No-ops when the config is absent or unparseable.",
+      severity: 'error',
+      async check(ctx) {
+        const emit: Emit = (message) =>
+          ctx.report.violation({
+            message: `Harness config ${message} (GEN-002 [config-shape-valid]).`,
+            file: CONFIG_PATH,
+          });
+        const config = await tryReadJSON(ctx, CONFIG_PATH);
+        if (config === null) return; // absent or unparseable — config-json-parses owns the latter
+        if (!isRecord(config)) {
+          emit('root must be a JSON object');
+          return;
+        }
+        const declared = await declaredPathsOf(ctx);
+        for (const [namespace, blocks] of Object.entries(config)) {
+          if (namespace === VERSION_KEY) continue;
+          if (!isRecord(blocks)) {
+            emit(
+              `'${namespace}' must be a namespace object holding config blocks — the config shape is {version, [namespace]: {[block]: …}}`,
+            );
+            continue;
+          }
+          for (const [name, block] of Object.entries(blocks)) {
+            const where = `${namespace}.${name}`;
+            if (!declared.has(where)) {
+              const known = [...declared].sort().join(', ');
+              emit(
+                `'${where}' matches no block a fence in ${EXTENSION_DTS} declares${known === '' ? '' : ` (declared blocks: ${known})`} — a typo here would otherwise silently fall back to the block's built-in default`,
+              );
+              continue; // a key that names no block has no spine to check
+            }
+            if (!isRecord(block)) {
+              emit(`'${where}' must be a JSON object satisfying the config block spine`);
+              continue;
+            }
+            checkBlockSpine(emit, where, block);
+          }
+        }
       },
     },
   },

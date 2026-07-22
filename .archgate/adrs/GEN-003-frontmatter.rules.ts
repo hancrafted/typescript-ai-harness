@@ -1,20 +1,43 @@
 /// <reference path="../rules.d.ts" />
+/// <reference path="../harness-config-extension.d.ts" />
 
 // GEN-003 — Frontmatter Contract: the OKF frontmatter floor that owns `type`
-// repo-wide. One rule, `frontmatter-floor`, resolves every governed markdown
-// file to its pathRules entry (first-match-wins) and enforces the floor there —
-// a kebab-case type, exactly one pinned label (name xor title), an optional
-// description (required when the entry sets requireDescription), and optional
-// comma-separated kebab-case tags. Scope and per-file policy are read from the harness config
-// `.typescript-ai-harness.json` (schema owned by GEN-002); when that config or
-// its `adr.frontmatter` block is absent the built-in DEFAULT_CONFIG below
-// applies. Single evaluation path: `userConfig?.adr?.frontmatter ?? DEFAULT`.
-// The rule DECLARES the error tier per GEN-001 §7 and emits a per-file report at
-// the matched entry's configured tier (default error) through one code path.
+// repo-wide, and the owner of the `markdown.frontmatter` block of the harness
+// config `.typescript-ai-harness.json` (envelope and generic spine: GEN-002).
+// Two rules:
+//   - `frontmatter-config-valid` validates the block's OWN vocabulary, payload
+//     only: each pathRules entry's `rule` and the block's `settings`, closed
+//     keys with shape checks — a typo like `maxDescriptions` errors instead of
+//     silently weakening the floor.
+//   - `frontmatter-floor` consumes the block: every governed markdown file,
+//     resolved to its pathRules entry by FileSet arithmetic (glob include −
+//     exclude) first-match-wins, carries the floor — a kebab-case type, exactly
+//     one pinned label (name xor title), an optional cap-checked description
+//     (required when the entry's rule says so) and optional comma-separated
+//     kebab-case tags. Under unmatched: 'error' every in-coverage file no
+//     entry claims is a violation.
+// Consumer contract (all-or-nothing, GEN-002 §3): config file absent, or a
+// healthy file without the block → the built-in DEFAULT_CONFIG below; file
+// present but unparseable, version skew against the installed harness release,
+// or a spine-/payload-invalid block → the block governs NOTHING (GEN-002's
+// rules and frontmatter-config-valid are the loud gate; best-effort would
+// enforce wrong policy). This ADR also owns its fence in
+// .archgate/harness-config-extension.d.ts — the `markdown.frontmatter`
+// declaration GEN-002's shape rule reads as this block's registration. Both
+// rules DECLARE the error tier per GEN-001 §7; the floor emits per-file
+// reports at the matched entry's configured tier (default error).
 const CONFIG_PATH = '.typescript-ai-harness.json';
+// Deliberate copy of GEN-002's version probe and semver shape check (rules
+// files cannot share runtime code): the config's top-level `version` must be a
+// semver-shaped string equal to the installed harness release in package.json,
+// or this consumer refuses to interpret the file — a config authored for
+// another release is never read with this one's semantics. The shared
+// conformance fixtures are the drift tripwire.
+const PACKAGE_JSON = 'package.json';
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
-// Default ceilings (OKF/Agent-Skills for label and description); a pathRules
-// entry may raise any of them via maxLabel / maxDescription / maxTag. `type` is
+// Default ceilings (OKF/Agent-Skills for label and description); an entry's
+// rule may raise any of them via maxLabel / maxDescription / maxTag. `type` is
 // the OKF anchor and is always mandatory in a governed entry.
 const DEFAULT_MAX_LABEL = 64;
 const DEFAULT_MAX_DESCRIPTION = 1024;
@@ -30,25 +53,55 @@ const DRAFT_TYPE = 'draft';
 // segments (e.g. `adr`, `design-adr`, `agents-md`).
 const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-// The built-in default policy, applied when the harness config or its
-// adr.frontmatter block is absent. Expressed in GEN-002's pathRules shape as a
-// typed constant — deliberately not a JSON file, which cannot live under
-// .archgate/adrs/ (GEN-001 adr-governed-files). Every entry is root-or-specific
-// (no `**`), closes allowedTypes to one type, pins the title label, and runs at
-// the error tier, so installing the contract never sweeps node_modules or
-// vendored markdown. Keys are unquoted so GEN-001's ruleKeysOf scan reads no
-// phantom rule here.
-const DEFAULT_CONFIG: Record<string, unknown> = {
+// The spine grammar this consumer refuses to interpret loosely — a structural
+// copy of GEN-002's checks (boolean, not reported: GEN-002 raises the errors).
+// Kept in lockstep via the shared conformance fixtures.
+const BLOCK_KEYS = ['unmatched', 'coverage', 'settings', 'pathRules'];
+const FILESET_KEYS = ['include', 'exclude'];
+const ENTRY_KEYS = ['include', 'exclude', 'exempt', 'severity', 'rule'];
+const VALID_UNMATCHED = ['exempt', 'error'];
+const VALID_ENTRY_TIERS = ['error', 'warning'];
+
+// The block's own vocabulary — the payload schema this ADR owns wholesale.
+const RULE_KEYS = ['allowedTypes', 'label', 'requireDescription', 'maxLabel', 'maxDescription', 'maxTag'];
+const SETTINGS_KEYS = ['draftEscape'];
+const VALID_LABELS = ['name', 'title'];
+
+// The built-in default policy, applied when the harness config file — or the
+// markdown.frontmatter block in a healthy file — is absent. Expressed in the
+// spine shape as a typed constant — deliberately not a JSON file, which cannot
+// live under .archgate/adrs/ (GEN-001 adr-governed-files). Every entry is
+// root-or-specific (no `**`), closes allowedTypes to one type via its rule
+// payload, pins the title label, and runs at the error tier, so installing the
+// contract never sweeps node_modules or vendored markdown. Keys are unquoted so
+// GEN-001's ruleKeysOf scan reads no phantom rule here.
+const DEFAULT_CONFIG = {
   unmatched: 'exempt',
   pathRules: [
-    { match: '.archgate/adrs/*.md', allowedTypes: ['adr'], label: 'title' },
-    { match: 'README.md', allowedTypes: ['docs'], label: 'title' },
-    { match: 'AGENTS.md', allowedTypes: ['agents-md'], label: 'title' },
-    { match: 'CLAUDE.md', allowedTypes: ['claude-md'], label: 'title' },
+    { include: ['.archgate/adrs/*.md'], rule: { allowedTypes: ['adr'], label: 'title' } },
+    { include: ['README.md'], rule: { allowedTypes: ['docs'], label: 'title' } },
+    { include: ['AGENTS.md'], rule: { allowedTypes: ['agents-md'], label: 'title' } },
+    { include: ['CLAUDE.md'], rule: { allowedTypes: ['claude-md'], label: 'title' } },
   ],
-};
+} satisfies Harness.ConfigBlock<Harness.FrontmatterRule, Harness.FrontmatterSettings> as Record<string, unknown>;
 
 type Emit = (detail: { message: string; file?: string }) => void;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function isPositiveInt(n: unknown): boolean {
+  return typeof n === 'number' && Number.isInteger(n) && n > 0;
+}
+
+function isGlobArray(v: unknown): boolean {
+  return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0);
+}
+
+function isKebabArray(a: unknown): boolean {
+  return Array.isArray(a) && a.every((x) => typeof x === 'string' && KEBAB_RE.test(x));
+}
 
 function extractFrontmatter(content: string): string | null {
   const m = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -83,34 +136,136 @@ async function tryReadJSON(ctx: RuleContext, path: string): Promise<unknown> {
   }
 }
 
-// The `adr.frontmatter` block of the harness config, or null when the config —
-// or that block — is absent or the wrong shape. The floor keys its DEFAULT
-// fallback off a null here.
-function frontmatterConfig(config: unknown): Record<string, unknown> | null {
-  if (!config || typeof config !== 'object') return null;
-  const adr = (config as Record<string, unknown>).adr;
-  if (!adr || typeof adr !== 'object') return null;
-  const fm = (adr as Record<string, unknown>).frontmatter;
-  if (!fm || typeof fm !== 'object') return null;
-  return fm as Record<string, unknown>;
-}
-
-function isPositiveInt(n: unknown): boolean {
-  return typeof n === 'number' && Number.isInteger(n) && n > 0;
-}
-
-function matchPatterns(m: unknown): string[] {
-  if (typeof m === 'string') return [m];
-  if (Array.isArray(m)) return m.filter((x): x is string => typeof x === 'string');
-  return [];
-}
-
 async function globAll(ctx: RuleContext, patterns: string[]): Promise<string[]> {
   const out = new Set<string>();
   for (const p of patterns) {
     for (const f of await ctx.glob(p)) out.add(f);
   }
   return [...out];
+}
+
+// The FileSet arithmetic (GEN-002 §3): glob(include) − glob(exclude). An
+// excluded file is NOT claimed — it falls through to later entries (and
+// ultimately to `unmatched`), unlike an exempt entry, which claims and waives.
+async function fileSetFiles(ctx: RuleContext, fileSet: Record<string, unknown>): Promise<string[]> {
+  const files = await globAll(ctx, Array.isArray(fileSet.include) ? (fileSet.include as string[]) : []);
+  if (!Array.isArray(fileSet.exclude) || fileSet.exclude.length === 0) return files;
+  const excluded = new Set(await globAll(ctx, fileSet.exclude as string[]));
+  return files.filter((f) => !excluded.has(f));
+}
+
+// ---- block validation shared by both rules ----
+
+function fileSetOk(fs: unknown): boolean {
+  if (!isRecord(fs)) return false;
+  if (Object.keys(fs).some((k) => !FILESET_KEYS.includes(k))) return false;
+  if (!isGlobArray(fs.include)) return false;
+  return fs.exclude === undefined || isGlobArray(fs.exclude);
+}
+
+function entrySpineOk(entry: unknown): boolean {
+  if (!isRecord(entry)) return false;
+  if (Object.keys(entry).some((k) => !ENTRY_KEYS.includes(k))) return false;
+  if (!isGlobArray(entry.include)) return false;
+  if (entry.exclude !== undefined && !isGlobArray(entry.exclude)) return false;
+  if (entry.exempt !== undefined && typeof entry.exempt !== 'boolean') return false;
+  if (entry.exempt === true && (entry.rule !== undefined || entry.severity !== undefined)) return false;
+  if (entry.severity !== undefined && !VALID_ENTRY_TIERS.includes(entry.severity as string)) return false;
+  return entry.rule === undefined || isRecord(entry.rule);
+}
+
+// Structural spine walk — pass/fail only. A block GEN-002 would reject must
+// never be best-effort-interpreted here (the all-or-nothing contract).
+function blockSpineOk(block: Record<string, unknown>): boolean {
+  if (Object.keys(block).some((k) => !BLOCK_KEYS.includes(k))) return false;
+  if (block.unmatched !== undefined && !VALID_UNMATCHED.includes(block.unmatched as string)) return false;
+  if ((block.unmatched === 'error') !== (block.coverage !== undefined)) return false;
+  if (block.coverage !== undefined && !fileSetOk(block.coverage)) return false;
+  if (block.settings !== undefined && !isRecord(block.settings)) return false;
+  return Array.isArray(block.pathRules) && block.pathRules.every(entrySpineOk);
+}
+
+function rulePayloadProblems(where: string, rule: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  for (const key of Object.keys(rule)) {
+    if (!RULE_KEYS.includes(key)) {
+      problems.push(
+        `'${where}.${key}' is not a frontmatter rule key — rule keys are {allowedTypes, label, requireDescription, maxLabel, maxDescription, maxTag}`,
+      );
+    }
+  }
+  if (rule.allowedTypes !== undefined && !isKebabArray(rule.allowedTypes)) {
+    problems.push(`'${where}.allowedTypes' must be an array of kebab-case type strings`);
+  }
+  if (rule.label !== undefined && !VALID_LABELS.includes(rule.label as string)) {
+    problems.push(`'${where}.label' must be 'name' or 'title'`);
+  }
+  if (rule.requireDescription !== undefined && typeof rule.requireDescription !== 'boolean') {
+    problems.push(`'${where}.requireDescription' must be a boolean`);
+  }
+  for (const cap of ['maxLabel', 'maxDescription', 'maxTag']) {
+    if (rule[cap] !== undefined && !isPositiveInt(rule[cap])) {
+      problems.push(`'${where}.${cap}' must be a positive integer`);
+    }
+  }
+  return problems;
+}
+
+// The block's payload vocabulary — everything the spine treats as opaque.
+// Single source of truth for both rules: frontmatter-config-valid reports each
+// problem; the floor refuses to govern while any exists.
+function payloadProblems(block: Record<string, unknown>): string[] {
+  const problems: string[] = [];
+  if (isRecord(block.settings)) {
+    for (const key of Object.keys(block.settings)) {
+      if (!SETTINGS_KEYS.includes(key)) {
+        problems.push(
+          `'markdown.frontmatter.settings.${key}' is not a frontmatter setting — settings are {draftEscape}`,
+        );
+      }
+    }
+    if (block.settings.draftEscape !== undefined && typeof block.settings.draftEscape !== 'boolean') {
+      problems.push(`'markdown.frontmatter.settings.draftEscape' must be a boolean`);
+    }
+  }
+  const pathRules = Array.isArray(block.pathRules) ? block.pathRules : [];
+  pathRules.forEach((entry, index) => {
+    if (!isRecord(entry) || !isRecord(entry.rule)) return; // non-object shapes are the spine's findings
+    problems.push(...rulePayloadProblems(`markdown.frontmatter.pathRules[${index}].rule`, entry.rule));
+  });
+  return problems;
+}
+
+// The installed harness release the config's top-level `version` must match.
+// Null when package.json is unreadable or carries no version string — the
+// comparison is then impossible and skipped (never guessed), mirroring
+// GEN-002's config-version rule.
+async function harnessVersionOf(ctx: RuleContext): Promise<string | null> {
+  const pkg = await tryReadJSON(ctx, PACKAGE_JSON);
+  return isRecord(pkg) && typeof pkg.version === 'string' ? pkg.version : null;
+}
+
+// Locate markdown.frontmatter under the consumer contract. Returns the block
+// to govern by, DEFAULT_CONFIG when the file or block is legitimately absent,
+// or null when the config is present but broken — in which case the floor
+// governs NOTHING and GEN-002 / frontmatter-config-valid carry the loud error.
+// The readFile probe distinguishes absent from unparseable, since readJSON
+// throws on both.
+async function resolveBlock(ctx: RuleContext): Promise<Record<string, unknown> | null> {
+  const raw = await tryReadFile(ctx, CONFIG_PATH);
+  if (raw === null) return DEFAULT_CONFIG; // no config file — the zero-config default
+  const config = await tryReadJSON(ctx, CONFIG_PATH);
+  if (!isRecord(config)) return null; // present but unparseable (or a non-object root)
+  if (typeof config.version !== 'string' || !SEMVER_RE.test(config.version)) return null; // stamp missing or malformed — present but invalid
+  const harnessVersion = await harnessVersionOf(ctx);
+  if (harnessVersion !== null && config.version !== harnessVersion) return null; // version skew — never interpret another release's data
+  const md = config.markdown;
+  if (md === undefined) return DEFAULT_CONFIG; // namespace absent in a healthy envelope — default
+  if (!isRecord(md)) return null;
+  const block = md.frontmatter;
+  if (block === undefined) return DEFAULT_CONFIG; // block absent in a healthy file — default
+  if (!isRecord(block) || !blockSpineOk(block) || payloadProblems(block).length > 0) return null;
+  return block;
 }
 
 // ---- frontmatter-floor helpers ----
@@ -201,8 +356,8 @@ function checkLabel(emit: Emit, file: string, fm: string, label: string | null, 
   checkLabelLength(emit, file, name ?? title, name ? 'name' : 'title', rule);
 }
 
-// `description` is optional by default; an entry opts into requiring it via
-// requireDescription. The cap applies whenever a description is present.
+// `description` is optional by default; an entry's rule opts into requiring it
+// via requireDescription. The cap applies whenever a description is present.
 function checkDescription(emit: Emit, file: string, fm: string, rule: Record<string, unknown>): void {
   const desc = getFrontmatterValue(fm, 'description');
   if (!desc) {
@@ -250,13 +405,16 @@ function checkTags(emit: Emit, file: string, fm: string, rule: Record<string, un
 async function checkFloor(
   ctx: RuleContext,
   file: string,
-  rule: Record<string, unknown>,
+  entry: Record<string, unknown>,
   draftEscape: boolean,
 ): Promise<void> {
+  // Policy lives in the entry's rule payload; the tier is spine data. An entry
+  // without a payload is an open governed entry — the baseline floor applies.
+  const rule = isRecord(entry.rule) ? entry.rule : {};
   // Per-entry tier resolved to the matching report channel — one code path, no
-  // second rule. A missing/other tier falls to violation (error).
+  // second rule. A missing tier falls to violation (error).
   const emit: Emit = (detail) =>
-    rule.severity === WARNING_TIER ? ctx.report.warning(detail) : ctx.report.violation(detail);
+    entry.severity === WARNING_TIER ? ctx.report.warning(detail) : ctx.report.violation(detail);
   const content = await tryReadFile(ctx, file);
   // A governed file we cannot read (e.g. a symlink archgate refuses to follow)
   // cannot be classified; exempt-by-default entries never glob such files, so
@@ -280,27 +438,55 @@ async function checkFloor(
 
 export default {
   rules: {
-    'frontmatter-floor': {
+    'frontmatter-config-valid': {
       description:
-        "Every governed markdown file, resolved to its pathRules entry first-match-wins (or the built-in default when the harness config is absent), carries the OKF floor: a kebab-case type (checked against the entry's allowedTypes, plus draft when draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required only when the entry sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry or an unmatched file bears no floor. The rule runs the single path userConfig?.adr?.frontmatter ?? DEFAULT and emits at the matched entry's tier (default error) from one code path.",
+        "The markdown.frontmatter block's own vocabulary is well-formed — payload only, complementing GEN-002's domain-blind spine: each pathRules entry's `rule` is closed to {allowedTypes (kebab-case strings), label (name|title), requireDescription (boolean), maxLabel/maxDescription/maxTag (positive integers)} with unknown keys rejected (closes the maxDescriptions-typo hole that silently weakened the floor), and `settings` is closed to {draftEscape (boolean)}. No-ops when the config file, its markdown namespace, or the frontmatter block is absent; spine-shape findings stay GEN-002's.",
       severity: 'error',
       async check(ctx) {
-        // Single evaluation path: a present adr.frontmatter block replaces the
-        // default outright; an absent one falls back to the built-in default.
-        const fm = frontmatterConfig(await tryReadJSON(ctx, CONFIG_PATH)) ?? DEFAULT_CONFIG;
-        const pathRules = Array.isArray(fm.pathRules) ? fm.pathRules : [];
-        const draftEscape = fm.draftEscape === true;
+        const config = await tryReadJSON(ctx, CONFIG_PATH);
+        if (!isRecord(config)) return;
+        const md = config.markdown;
+        if (!isRecord(md)) return;
+        const block = md.frontmatter;
+        if (!isRecord(block)) return;
+        for (const problem of payloadProblems(block)) {
+          ctx.report.violation({
+            message: `Harness config ${problem} (GEN-003 [frontmatter-config-valid]).`,
+            file: CONFIG_PATH,
+          });
+        }
+      },
+    },
+
+    'frontmatter-floor': {
+      description:
+        "Every governed markdown file, resolved to its pathRules entry by FileSet arithmetic (glob include − exclude) first-match-wins — or to the built-in default when the config file or its markdown.frontmatter block is absent — carries the OKF floor: a kebab-case type (checked against the entry rule's allowedTypes, plus draft when settings.draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required when the entry's rule sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry claims and waives; an excluded file falls through. Under unmatched: 'error', every in-coverage file no entry claims is a violation. All-or-nothing consumer contract: an unparseable config, a version stamp that is missing or skewed against the installed harness release, or a spine- or payload-invalid block governs NOTHING — GEN-002 and frontmatter-config-valid are the loud gate. Violations emit at the matched entry's tier (default error).",
+      severity: 'error',
+      async check(ctx) {
+        const block = await resolveBlock(ctx);
+        if (block === null) return; // broken config — governs nothing, loudly gated elsewhere
+        const settings = isRecord(block.settings) ? block.settings : {};
+        const draftEscape = settings.draftEscape === true;
+        const pathRules = Array.isArray(block.pathRules) ? block.pathRules : [];
         const claimed = new Set<string>();
         for (const entry of pathRules) {
-          if (!entry || typeof entry !== 'object') continue;
-          const rule = entry as Record<string, unknown>;
-          const patterns = matchPatterns(rule.match);
-          if (patterns.length === 0) continue;
-          for (const file of await globAll(ctx, patterns)) {
+          if (!isRecord(entry)) continue;
+          for (const file of await fileSetFiles(ctx, entry)) {
             if (claimed.has(file)) continue; // an earlier entry owns it (first-match-wins)
             claimed.add(file);
-            if (rule.exempt === true) continue; // floor off for this entry
-            await checkFloor(ctx, file, rule, draftEscape);
+            if (entry.exempt === true) continue; // claims and waives — floor off for this entry
+            await checkFloor(ctx, file, entry, draftEscape);
+          }
+        }
+        // The strict posture: coverage − claimed = files the config forgot.
+        // Always at the error tier — an unclaimed file has no entry to carry one.
+        if (block.unmatched === 'error' && isRecord(block.coverage)) {
+          for (const file of await fileSetFiles(ctx, block.coverage)) {
+            if (claimed.has(file)) continue;
+            ctx.report.violation({
+              message: `File is inside the frontmatter block's coverage but matched no pathRules entry — add a governing entry, an exempt carve-out, or a coverage exclude (GEN-003 [frontmatter-floor]).`,
+              file,
+            });
           }
         }
       },

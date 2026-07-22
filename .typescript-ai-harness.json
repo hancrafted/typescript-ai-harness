@@ -1,17 +1,24 @@
 {
-  "adr": {
+  "version": "0.1.0",
+  "markdown": {
     "frontmatter": {
       "unmatched": "exempt",
-      "draftEscape": true,
+      "settings": { "draftEscape": true },
       "pathRules": [
-        { "match": "docs/adr/*.md", "allowedTypes": ["design-adr"], "label": "title" },
-        { "match": "docs/agents/*.md", "allowedTypes": ["agent-doc"], "label": "title" },
-        { "match": ".archgate/adrs/*.md", "allowedTypes": ["adr"], "label": "title", "requireDescription": true },
-        { "match": ".claude/agents/*.md", "allowedTypes": ["agent"], "label": "name", "maxDescription": 4096 },
-        { "match": "CONTEXT.md", "allowedTypes": ["context"], "label": "title" },
-        { "match": "README.md", "allowedTypes": ["docs"], "label": "title" },
-        { "match": "AGENTS.md", "allowedTypes": ["agents-md"], "label": "title" },
-        { "match": "CLAUDE.md", "allowedTypes": ["claude-md"], "label": "title" }
+        { "include": ["docs/adr/*.md"], "rule": { "allowedTypes": ["design-adr"], "label": "title" } },
+        { "include": ["docs/agents/*.md"], "rule": { "allowedTypes": ["agent-doc"], "label": "title" } },
+        {
+          "include": [".archgate/adrs/*.md"],
+          "rule": { "allowedTypes": ["adr"], "label": "title", "requireDescription": true }
+        },
+        {
+          "include": [".claude/agents/*.md"],
+          "rule": { "allowedTypes": ["agent"], "label": "name", "maxDescription": 4096 }
+        },
+        { "include": ["CONTEXT.md"], "rule": { "allowedTypes": ["context"], "label": "title" } },
+        { "include": ["README.md"], "rule": { "allowedTypes": ["docs"], "label": "title" } },
+        { "include": ["AGENTS.md"], "rule": { "allowedTypes": ["agents-md"], "label": "title" } },
+        { "include": ["CLAUDE.md"], "rule": { "allowedTypes": ["claude-md"], "label": "title" } }
       ]
     }
   }

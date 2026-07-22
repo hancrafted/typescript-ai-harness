@@ -29,9 +29,13 @@ Rejected alternatives:
 ### 2. The frontmatter floor (📜 Rule: `frontmatter-floor`)
 
 1. **`type`:** always required, kebab-case. With the entry's `allowedTypes`, the value MUST be a member (plus `draft` when `settings.draftEscape` is on); without it, any kebab-case value passes.
-2. **Label:** exactly one of `name` xor `title`, non-empty, ≤ 64 chars (`maxLabel`). When the entry pins a label, only that key MAY appear — the unpinned label, or both, is a violation.
+2. **`Label`:** exactly one of `name` xor `title`, non-empty, ≤ 64 chars (`maxLabel`). When the entry pins a label, only that key MAY appear — the unpinned label, or both, is a violation.
 3. **`description`:** optional; required when the entry sets `requireDescription`. When present, ≤ 1024 chars (`maxDescription`).
 4. **`tags`:** optional; a comma-separated list, each tag kebab-case and ≤ 30 chars (`maxTag`). No closed set, no count limit.
+
+### 3. Config
+
+1. Frontmatter behaviour is configurable and enforced  (📜 Rule: `frontmatter-config-valid`) 
 
 ## Do's and Don'ts
 
@@ -40,7 +44,8 @@ Rejected alternatives:
 
 1. **DON'T** invent frontmatter keys outside the floor to mean "type" — `type` is the one OKF anchor this contract owns.
 2. **DON'T** carry both `name` and `title`, or the label the matched entry did not pin.
-3. **DON'T** lower the floor below `type` + one label.vo
+3. **DON'T** adjust config to fix archage check issues (Decision 3, 📜 Rule: `frontmatter-config-valid`) 
+
 
 ## Consequences
 

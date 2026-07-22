@@ -55,16 +55,36 @@ _Avoid_: `files` (the retired field name), scope globs
 ## Frontmatter governance
 
 **Frontmatter floor**:
-The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title`. `description` and `tags` are optional, cap-checked keys; a pathRules entry can make `description` mandatory via `requireDescription`. A floor, not a ceiling — a pathRules entry may require more, never less. Owned by `GEN-003-frontmatter`; full config reference in `docs/agents/frontmatter-config.md`.
+The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title`. `description` and `tags` are optional, cap-checked keys; a pathRules entry's `rule` payload can make `description` mandatory via `requireDescription`. A floor, not a ceiling — an entry may require more, never less. Owned by `GEN-003-frontmatter`; full config reference in `docs/agents/frontmatter-config.md`.
 _Avoid_: frontmatter schema, header, metadata block
 
 **pathRules entry**:
-A path-glob region of the repo carrying one frontmatter policy: either *exempt* (no floor) or *governed* (floor required, plus an optional closed `allowedTypes` set). Entries are declared and ordered under `adr.frontmatter.pathRules` in the harness config and evaluated first-match-wins; a file matching no entry is exempt by default. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
+One ordered element of a Config block's `pathRules`, claiming a FileSet of files (`include` minus `exclude`) first-match-wins and carrying one policy: *exempt* (claims and waives the floor) or *governed* (Spine keys plus an optional block-owned `rule` payload). An entry `exclude` does NOT exempt — the file falls through to later entries, then to `unmatched`. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
 _Avoid_: Zone (retired name), scope, surface
 
 **Harness config**:
-The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. Frontmatter governance lives under its `adr.frontmatter` key (pathRules, `unmatched`, `draftEscape`). When absent, `GEN-003-frontmatter`'s built-in default applies. The file and its schema are owned by `GEN-002-harness-config`.
+The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. A Seeded config file: written once at install, never patched on re-run; upgrades are an explicit migrate step guarded by the top-level `version` stamp — a semver string that must exactly match the installed harness release. The shape is exactly two key levels: `version` plus namespaces (e.g. `markdown`) holding Config blocks. The envelope and Spine are owned by `GEN-002-harness-config`; each block's registration and payload by its owning ADR.
 _Avoid_: manifest (retired name), frontmatter config file
+
+**Config block**:
+One `namespace.block` key of the harness config (currently only `markdown.frontmatter`), owned *wholesale* by a single governance ADR: its Config extension fence, payload schema, validation, interpretation, and built-in default. The set of legal block keys is closed — it is the union of fence-declared paths, so an undeclared block name is an error, never a silent fallback — yet GEN-002 hardcodes no name.
+_Avoid_: section, module, plugin
+
+**Config extension fence**:
+A marker-delimited region of the config extension types file, `// <ADR-ID>-START: <namespace.block>` … `// <ADR-ID>-END`, where one block ADR registers its Config block and carries its types. GEN-002 owns the fence *grammar* (balance, unique well-formed paths); the block ADR owns the fence *contents*. Adding a block means adding a fence plus an owning ADR — GEN-002 is never amended.
+_Avoid_: registry entry, marker block, region
+
+**Spine**:
+The generic, domain-blind grammar every path-scoped Config block satisfies, owned by GEN-002: `pathRules` (FileSet entries with `exempt`/`severity`/`rule`), `unmatched` (`exempt` or `error`), `coverage` (required iff `unmatched: error`), and `settings`. The Spine never inspects inside `rule` or `settings` — those are block-owned payload.
+_Avoid_: schema (ambiguous), envelope (that's the file-level contract)
+
+**FileSet**:
+The `{include, exclude}` glob pair naming a set of files by arithmetic: `glob(include) − glob(exclude)`. `include` is always a non-empty array. Used by every pathRules entry and by `coverage`; excluding a file from an entry lets it fall through, excluding it from `coverage` removes it from the strict universe.
+_Avoid_: match (retired name), glob (the FileSet holds globs; it isn't one)
+
+**rule (pathRules payload)**:
+The block-owned policy object inside a governed pathRules entry — for the frontmatter block: `allowedTypes`, `label`, `requireDescription`, and the caps. Opaque to GEN-002's Spine; schema owned by the block ADR (GEN-003). Deliberately overloaded with an archgate *executable rule* (`*.rules.ts`) — qualify as "rule payload" vs "archgate rule" when ambiguity bites.
+_Avoid_: policy, options (reserved), config (too broad)
 
 **Design ADR**:
 A prose decision record under `docs/adr/` (`type: design-adr`) authored via the Matt-Pocock `/domain-modeling` skill — the lightweight *why*. Distinct from a Governance ADR; the two coexist and are disambiguated by `type`, never by prose.
