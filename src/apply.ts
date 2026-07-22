@@ -1,4 +1,13 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ensurePackageJson, mergePackageJson } from './package-json';
 import type { Action, Exec } from './types';
@@ -24,9 +33,12 @@ const ofKind = <K extends Action['kind']>(actions: Action[], kind: K): Extract<A
 /**
  * The single executor for every declarative Action (ADR-0004). Steps run in a
  * fixed canonical order regardless of emission order: merge package.json →
- * gitignore → install → write configs → run commands. Install precedes the
- * run-commands because their binaries (archgate for interactive `init`, husky)
- * must exist first.
+ * gitignore → install → write configs → copy asset bundles → symlink into them
+ * → run commands. Install precedes the run-commands because their binaries
+ * (archgate for interactive `init`, husky) must exist first; symlinks are
+ * created after the copy so their targets already exist in the copied tree, and
+ * both precede the commands so `archgate check` runs against the materialised
+ * workspace.
  * `dryRun` reports every intended change and touches nothing (ADR-0002).
  */
 export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
@@ -41,6 +53,8 @@ export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
   appendStep(actions, ctx);
   await installStep(actions, ctx);
   writeStep(actions, ctx);
+  copyAssetStep(actions, ctx);
+  symlinkStep(actions, ctx);
   await commandStep(actions, ctx);
 }
 
@@ -77,6 +91,25 @@ function writeStep(actions: Action[], ctx: Resolved): void {
   for (const action of ofKind(actions, 'writeFile')) writeOne(action, ctx);
 }
 
+/**
+ * Copy a bundled-asset (sub)tree into the Target (ADR-0010 §5). `from` is an
+ * absolute path into the CLI's captured bundle; `to` is Target-relative. The
+ * bundle is Tool-owned, so existing files are overwritten (`force`) on every run.
+ */
+function copyAssetStep(actions: Action[], ctx: Resolved): void {
+  for (const action of ofKind(actions, 'copyAsset')) {
+    ctx.log(`copy   ${action.to} (from bundled asset)`);
+    if (ctx.dryRun) continue;
+    const dest = join(ctx.cwd, action.to);
+    mkdirSync(dirname(dest), { recursive: true });
+    cpSync(action.from, dest, { recursive: true, force: true });
+  }
+}
+
+function symlinkStep(actions: Action[], ctx: Resolved): void {
+  for (const action of ofKind(actions, 'symlink')) symlinkOne(action, ctx);
+}
+
 async function commandStep(actions: Action[], ctx: Resolved): Promise<void> {
   for (const action of ofKind(actions, 'runCommand')) {
     ctx.log(`run    ${action.command} ${action.args.join(' ')}`);
@@ -94,6 +127,33 @@ function writeOne(action: Extract<Action, { kind: 'writeFile' }>, ctx: Resolved)
   if (ctx.dryRun) return;
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, action.contents, { mode: action.path.startsWith('.husky/') ? 0o755 : 0o644 });
+}
+
+/**
+ * Create a REAL relative symlink, replacing whatever is already at the path so a
+ * re-run is idempotent (Tool-owned). It never falls back to copying the target's
+ * body: a copy would let `archgate check` open the file and invert its
+ * `adr-claude-rules-symlink` rule, turning every ADR into a false violation
+ * (ADR-0010 §5). A creation failure — e.g. Windows without Developer Mode
+ * (deferred, #4) — is wrapped and rethrown so it surfaces loudly instead of
+ * degrading silently.
+ */
+function symlinkOne(action: Extract<Action, { kind: 'symlink' }>, ctx: Resolved): void {
+  ctx.log(`symlink ${action.path} -> ${action.target}`);
+  if (ctx.dryRun) return;
+  const link = join(ctx.cwd, action.path);
+  try {
+    mkdirSync(dirname(link), { recursive: true });
+    rmSync(link, { force: true });
+    symlinkSync(action.target, link);
+  } catch (cause) {
+    throw new Error(
+      `symlink ${action.path} -> ${action.target} failed: a real symlink is required ` +
+        `(a copied file would invert archgate's adr-claude-rules-symlink check); this ` +
+        `platform may need elevated permissions, e.g. Windows Developer Mode (#4)`,
+      { cause },
+    );
+  }
 }
 
 /**
