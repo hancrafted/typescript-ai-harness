@@ -59,6 +59,7 @@ Rejected alternatives:
 
 1. **The default fires on install:** an unfrontmattered `README.md`/`AGENTS.md`/`CLAUDE.md` errors until fixed — accepted; the fix is cheap and silent non-governance defeats the point.
 2. **Regex frontmatter parsing:** floor keys must be single-line values; block scalars are out of scope until AST-hardening (deferred).
+3. **A structural spine copy rides along:** the consumer refuses blocks GEN-002 would reject, so it carries a boolean copy of the spine walk and version probe (archgate rules cannot share runtime code) — kept honest by the shared fixtures both rules tests import.
 4. **`warning` tier unverified against the real binary** (inferred from test mocks) — mitigated by the real-binary test (deferred); fallback is two floor rules split by tier.
 5. **A widened default could sweep vendored markdown** — mitigated by keeping default entries root-or-specific (§3.4); broad globs belong in an explicit, reviewed project config.
 
