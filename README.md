@@ -14,7 +14,7 @@ Prettier, Vitest, and Husky, wires the `verify` scripts and git hooks, and appli
 everything in a single pass. Re-run it any time to pull the latest version of the
 harness — it updates in place without clobbering your project metadata.
 
-- **One command, no install step** — runs straight from GitHub via `npx`.
+- **One command, no install step** — `npx @hancrafted/typescript-ai-harness` pulls one small tarball with zero runtime dependencies.
 - **Pick what you want** — a multiselect of five integrations, each with its own sub-options.
 - **Safe to re-run** — tool-owned configs are refreshed; your `package.json` is surgically merged, never overwritten.
 - **Preview first** — `--dry-run` prints the full plan and touches nothing.
@@ -25,10 +25,11 @@ harness — it updates in place without clobbering your project metadata.
 ## Requirements
 
 - **Node.js** 20+ and **npm** (the tool assumes npm for installs and hooks).
-- **git** — the tool runs from a GitHub spec, and Husky wires git hooks.
+- **git** — Husky wires git hooks, so the tool runs inside a git repository.
 
-No global install and no build step: the CLI ships its TypeScript source and runs it
-through [tsx](https://www.npmjs.com/package/tsx) at invocation time.
+No global install and no build toolchain: `npx` pulls a single bundled file with zero
+runtime dependencies and runs it directly — you don't need [tsx](https://www.npmjs.com/package/tsx)
+or a compile step on your machine.
 
 ---
 
@@ -39,7 +40,7 @@ through [tsx](https://www.npmjs.com/package/tsx) at invocation time.
 From the root of the project you want to set up:
 
 ```bash
-npx github:hancrafted/typescript-ai-harness
+npx @hancrafted/typescript-ai-harness
 ```
 
 If the directory has no `package.json`, the tool creates a minimal one for you first —
@@ -78,7 +79,7 @@ you say yes.
 ### Preview without changing anything
 
 ```bash
-npx github:hancrafted/typescript-ai-harness --dry-run
+npx @hancrafted/typescript-ai-harness --dry-run
 ```
 
 `--dry-run` runs the prompts and prints the full plan, then exits **without touching the
@@ -87,7 +88,7 @@ project**. Ideal for previewing an update.
 ### Non-interactive mode
 
 ```bash
-npx github:hancrafted/typescript-ai-harness --yes
+npx @hancrafted/typescript-ai-harness --yes
 ```
 
 `--yes` skips every prompt — the integrations multiselect and each integration's
@@ -152,8 +153,10 @@ repo (so a staged change can never commit a red tree).
 
 ## Notes & current limitations
 
-- **Distribution.** During active development the tool runs from a GitHub spec
-  (`npx github:hancrafted/typescript-ai-harness`); there's no build step and no npm publish yet.
+- **Distribution.** Published to npm as `@hancrafted/typescript-ai-harness` — a single
+  bundled file with **zero runtime dependencies**. Contributors still run the source
+  directly through [tsx](https://www.npmjs.com/package/tsx) via the git-spec dev inner
+  loop; only the _published_ `bin` points at the bundle.
 - **npm only.** pnpm / yarn / bun detection is not implemented.
 - **No ADRs are copied** by the archgate integration in this version — you start from a clean
   governance baseline. `archgate init` may require you to be in a git repository.
@@ -169,9 +172,11 @@ continuously exercised against a real project (itself).
 
 ```bash
 npm install        # install the harness devDependencies
-npm run verify     # eslint . && prettier --check . && tsc --noEmit && vitest run
+npm run verify     # archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run
 npm test           # vitest run
 npm run format     # prettier --write .
+npm run build      # bundle src/cli.ts -> dist/cli.mjs (the published bin)
+npm run smoke      # boot-smoke the built bundle (--dry-run --yes); run after build
 ```
 
 ### Layout
@@ -207,6 +212,33 @@ materialized, `package.json` after merge, and which external commands were invok
 ```bash
 npm test
 ```
+
+A second seam, the **boot-smoke**, spawns the _built_ bundle as a subprocess with
+`--dry-run --yes` and asserts a clean exit and a coherent plan preview — the only check
+that exercises the published artifact rather than source. It runs after `npm run build`
+(never inside `verify`, which builds nothing):
+
+```bash
+npm run build && npm run smoke
+```
+
+### Releasing
+
+Releases are cut manually. CI (`ci.yml`) verifies, builds, and boot-smokes every push and
+PR; a `v*` tag triggers `publish.yml`, which re-verifies, rebuilds, and publishes to npm
+with provenance. To release:
+
+```bash
+npm version <patch|minor|major>   # bumps package.json and creates the vX.Y.Z tag
+git push --follow-tags            # pushes the commit and the tag -> triggers publish.yml
+```
+
+The package stays in `0.x` until the CLI surface is deliberately declared stable. Publishing
+uses npm **trusted publishing** (OIDC) — no token, nothing to rotate: CI authenticates via
+the workflow's `id-token` and provenance is attached automatically. This requires a one-time
+setup on npmjs.com — configure a trusted publisher for the package (this repo + `publish.yml`)
+— and, because OIDC cannot create a not-yet-published package, a one-time manual publish of a
+`0.0.0` placeholder with interactive 2FA to bootstrap it (see ADR-0009).
 
 ---
 

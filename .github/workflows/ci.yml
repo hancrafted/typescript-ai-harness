@@ -1,0 +1,42 @@
+name: CI
+
+# Fast pipeline (ADR-0009): verify → build → boot-smoke the bundle on every push
+# and PR. It builds and boots the published artifact but never publishes — that
+# is publish.yml's job, gated on a v* tag.
+on:
+  push:
+  pull_request:
+
+# A newer push to the same ref cancels the in-flight run, so feedback stays fast
+# and cheap (US-25). Push and PR runs live in separate groups (distinct refs) and
+# do not cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify + build + smoke (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so archgate's base-branch comparison has the refs it needs.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      # Clean, lockfile-pinned install (ADR-0009).
+      - run: npm ci
+      # archgate check + eslint + prettier + tsc + vitest (ADR-0007).
+      - run: npm run verify
+      # Build the single-file bundle, then boot-smoke the *published artifact* —
+      # catches a bundling break (bad entry, dropped import, broken shebang) that
+      # source-level tests cannot (ADR-0009).
+      - run: npm run build
+      - run: npm run smoke

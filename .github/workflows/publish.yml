@@ -1,0 +1,51 @@
+name: Publish
+
+# Release pipeline (ADR-0009, amended 2026-07-21): a v* tag re-verifies and
+# rebuilds, then publishes to npm via OIDC **trusted publishing** — no token.
+# Releases are cut manually — `npm version <bump>` then `git push --follow-tags`
+# — so publishing is a deliberate, auditable act. A failing verify or build
+# aborts the job before anything reaches npm.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    name: verify + build + publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # OIDC token for npm trusted publishing (also drives automatic provenance).
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          # Node 24 ships npm >= 11.5.1, required for trusted publishing (ADR-0009).
+          # `registry-url` is required: OIDC only engages when the registry is
+          # explicitly configured. It also makes setup-node write a placeholder
+          # `_authToken` line, which is stripped in the next step (see below).
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Enable OIDC trusted publishing
+        # setup-node writes `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` when
+        # registry-url is set; with no token that placeholder makes npm use token auth
+        # and skip the OIDC exchange (actions/setup-node#1551). Strip only that line so
+        # the explicit registry stays (OIDC needs it) but npm falls through to trusted
+        # publishing. The echo confirms the OIDC env is present without leaking it.
+        run: |
+          sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          echo "OIDC request URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run build
+      # Trusted publishing: the npm CLI detects the GitHub Actions OIDC environment
+      # and authenticates with no token; provenance is attached automatically.
+      # Requires a trusted publisher for this package on npmjs.com (this repo +
+      # this workflow filename); OIDC cannot create a new package, so the first
+      # version is published manually (see ADR-0009). prepublishOnly rebuilds as a
+      # last guard so a stale or missing bundle can never ship (US-11, US-23).
+      - run: npm publish --access public
