@@ -31,7 +31,7 @@ import {
   VERSION_MALFORMED_CONFIG,
   VERSION_MISMATCH_CONFIG,
   VERSION_MISSING_CONFIG,
-} from '../../test/fixtures/harness-config-fixtures';
+} from '../harness-config-fixtures';
 import ruleSet from './GEN-002-harness-config.rules';
 
 interface Reported {
