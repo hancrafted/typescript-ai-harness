@@ -55,7 +55,7 @@ Every ADR MUST carry all six canonical H2 headings — exact text, presence-only
 An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so every sentence is authoring-steering instruction for whoever opens a file its `paths:` governs — for GEN-001, ADR markdown and companion `.rules.ts`. Items 1–4 are the machine-checked shape grammar; items 5–10 are the prose standard that shape carries. The shape is linted by this ADR's own rules; the prose standard is guidance the `adr-author` skill applies and review upholds — deliberately unlinted, since an LLM writes to it better than a regex checks it.
 
 1. Decision anchors are numbered `### N.` sequential from 1 (or a single top-level ordered list when an ADR uses no anchors); the first-level items inside each anchor form a sequential ordered list, never loose bullets. (📜 Rule: `adr-numbered-decision`)
-2. The Do's and the Don'ts are each written as an ordered list restarting at 1, every item keeping its bold `**DO**` / `**DON'T**` prefix. (📜 Rule: `adr-numbered-dos-donts`)
+2. The Do's and the Don'ts sit under exactly one `### Do's` and one `### Don'ts` heading, in that order, each block an ordered list restarting at 1 with every item keeping its bold `**DO**` / `**DON'T**` prefix — the heading break is what makes the restart render; bare adjacent lists merge, numbering the Don'ts on from the Do's. (📜 Rule: `adr-numbered-dos-donts`)
 3. Every rule in a companion `.rules.ts` is anchored to prose twice — a Decision-side marker on the anchor that decides it, and a back-referencing Do's/Don'ts marker naming that anchor — so no rule enforces something the prose never states, and no stated rule goes unenforced. (📜 Rule: `adr-rule-mentions`)
 4. The retired `[review]` tag MUST NOT appear in an ADR outside code spans; a review obligation is written into the Manual review duties instead. (📜 Rule: `adr-no-review-tag`)
 5. **Root** — every sentence earns its place by steering the reader to write a correct governed file. Per-sentence test: "does this help author the file? If not, cut it or move it to a reference doc." An ADR is runtime instruction, not a design essay.
@@ -76,13 +76,15 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 
 ## Do's and Don'ts
 
+### Do's
+
 1. **DO** open every ADR with frontmatter in the order `type → id → title → domain → rules → paths`, `type: adr`, `id` matching the filename. (Decision 2, 📜 Rule: `adr-frontmatter`)
 2. **DO** emit all six canonical H2 sections; presence-only, empty bodies pass the linter but not review. (Decision 3, 📜 Rule: `adr-required-sections`)
 3. **DO** give every ADR that declares a non-empty `paths:` a `.claude/rules/<basename-lowercased>.md` symlink pointing back to it. (Decision 4, 📜 Rule: `adr-claude-rules-symlink`)
 4. **DO** express always-on scope as `paths: ["**/*"]` rather than omitting `paths`.
 5. **DO** keep the runtime entry a symlink (a pointer), never a copied body.
 6. **DO** number Decision anchors `### N.` from 1 and keep each anchor's first-level items a sequential ordered list. (Decision 5, 📜 Rule: `adr-numbered-decision`)
-7. **DO** write the Do's and the Don'ts each as an ordered list restarting at 1, every item keeping its `**DO**` / `**DON'T**` prefix. (Decision 5, 📜 Rule: `adr-numbered-dos-donts`)
+7. **DO** head the blocks with `### Do's` then `### Don'ts` and write each as an ordered list restarting at 1, every item keeping its `**DO**` / `**DON'T**` prefix. (Decision 5, 📜 Rule: `adr-numbered-dos-donts`)
 8. **DO** anchor every companion rule to prose on both sides — a Decision-side marker on the deciding anchor and a back-referencing Do's/Don'ts marker naming that anchor. (Decision 5, 📜 Rule: `adr-rule-mentions`)
 9. **DO** give every `.rules.ts` a sibling `.rules.test.ts` that exercises each rule's pass and fail path. (Decision 6, 📜 Rule: `adr-rules-test-sibling`)
 10. **DO** embed the provenance tag `(<ID> [<rule-key>])` in every rule's report messages. (Decision 6, 📜 Rule: `adr-message-provenance`)
@@ -92,6 +94,8 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 14. **DO** keep one idea per list item, leading with the point. (Decision 5)
 15. **DO** keep Consequences and Compliance lean — the live tradeoff and the enforcement surface, with the mechanism left to a reference doc or the rules file. (Decision 5)
 16. **DO** pitch each ADR at the authors of the files its `paths:` governs, dropping mechanics that never reach that reader. (Decision 5)
+
+### Don'ts
 
 1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-003's, INDEX routing is the index ADR's.
 2. **DON'T** leave a `.claude/rules` ADR entry behind when its backing ADR is deleted or drops its `paths:` — remove the symlink in the same change.
@@ -118,7 +122,7 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 1. **Symlink upkeep:** one `.claude/rules` symlink per scoped ADR is extra surface to keep in sync — mitigated: `adr-claude-rules-symlink` fails on drift.
 2. **Inverting behavioral dependency:** the symlink-not-copy check rides on archgate's file reader rejecting symlinks — not a semver-guaranteed contract, and the binary is a shared global cache (`~/.archgate/bin`), not a per-repo pin. If a release starts following symlinks the check inverts — every valid symlink reads as a forbidden copy, blocking all commits, while orphan detection goes silent — and only a real `archgate check` surfaces it, since the unit tests mock the non-following reader. Recovery: pin or roll back the binary, or amend this rule and fall back to the copy-body generator (Context).
 3. **Regex meta-parsing:** the meta-rules parse YAML and TypeScript with regexes, so quoted kebab-case rule keys and inline `paths:` are load-bearing conventions; AST hardening is tracked in [#7](https://github.com/hancrafted/typescript-ai-harness/issues/7).
-4. **Authoring ceremony:** twelve rules per ADR — numbered anchors, twin markers, a sibling rules-test, provenance tags — is more to satisfy than plain prose. Mitigated: the `adr-author` skill encodes the shape, this ADR auto-loads on any ADR Read, and each rule's message names the fix.
+4. **Authoring ceremony:** the contract's full rule set — numbered anchors, subsection headings, twin markers, a sibling rules-test, provenance tags — is more to satisfy than plain prose. Mitigated: the `adr-author` skill encodes the shape, this ADR auto-loads on any ADR Read, and each rule's message names the fix.
 5. **Target correctness unverified:** the symlink rule proves a symlink exists at the expected name, not that it resolves to its own ADR — a mispointed or dangling link passes and silently loads wrong or no context. The rule API cannot readlink; alignment is a manual review duty, tracked in [#9](https://github.com/hancrafted/typescript-ai-harness/issues/9).
 
 **Risks:**
@@ -128,7 +132,7 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 
 ## Compliance and Enforcement
 
-Automated: `GEN-001-adr.rules.ts` enforces twelve rules, all at `error` (§7), scoped to ADR basenames under `.archgate/adrs/`; each is marked at its deciding anchor in §1–§7, with the rules file as the source-of-truth for the full set.
+Automated: `GEN-001-adr.rules.ts` runs every companion rule at `error` (§7), scoped to ADR basenames under `.archgate/adrs/`; each rule is marked at its deciding anchor, with the rules file as the source-of-truth for the full set.
 
 **Manual review duties** (never linted): `paths:` globs actually describe the ADR's real governance surface; each `.claude/rules` symlink resolves to its own ADR (§4.2 — link targets are not machine-checkable); the sibling `.rules.test.ts` exercises each rule's pass and fail path (§6.1); section bodies are substantive, not empty placeholders that pass the presence-only check; the prose obeys §5's standard (Root through Audience), which no rule enforces.
 

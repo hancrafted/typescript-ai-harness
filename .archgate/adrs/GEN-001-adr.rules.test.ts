@@ -248,18 +248,40 @@ describe('adr-numbered-decision', () => {
 });
 
 describe('adr-numbered-dos-donts', () => {
-  it("passes DO and DON'T blocks each ordered from 1", async () => {
-    const dosDonts = "1. **DO** a.\n2. **DO** b.\n\n1. **DON'T** c.\n2. **DON'T** d.";
+  it("passes headed DO and DON'T blocks each ordered from 1", async () => {
+    const dosDonts = "### Do's\n\n1. **DO** a.\n2. **DO** b.\n\n### Don'ts\n\n1. **DON'T** c.\n2. **DON'T** d.";
     const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
     await rules['adr-numbered-dos-donts'].check(ctx);
     expect(violations).toEqual([]);
   });
 
   it('fails on a non-sequential DO block', async () => {
-    const dosDonts = "1. **DO** a.\n3. **DO** b.\n\n1. **DON'T** c.";
+    const dosDonts = "### Do's\n\n1. **DO** a.\n3. **DO** b.\n\n### Don'ts\n\n1. **DON'T** c.";
     const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
     await rules['adr-numbered-dos-donts'].check(ctx);
     expect(violations.some((v) => /DO block numbering must be sequential/.test(v.message))).toBe(true);
+  });
+
+  it('fails bare adjacent lists that lack the subsection headings', async () => {
+    const dosDonts = "1. **DO** a.\n\n1. **DON'T** c.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
+    await rules['adr-numbered-dos-donts'].check(ctx);
+    expect(violations.some((v) => /exactly one "### Do's" subsection heading, found 0/.test(v.message))).toBe(true);
+    expect(violations.some((v) => /exactly one "### Don'ts" subsection heading, found 0/.test(v.message))).toBe(true);
+  });
+
+  it("fails when ### Don'ts precedes ### Do's", async () => {
+    const dosDonts = "### Don'ts\n\n1. **DON'T** c.\n\n### Do's\n\n1. **DO** a.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
+    await rules['adr-numbered-dos-donts'].check(ctx);
+    expect(violations.some((v) => /"### Do's" must precede "### Don'ts"/.test(v.message))).toBe(true);
+  });
+
+  it('fails an item filed under the wrong subsection', async () => {
+    const dosDonts = "### Do's\n\n1. **DO** a.\n2. **DON'T** stray.\n\n### Don'ts\n\n1. **DON'T** c.";
+    const { ctx, violations } = makeCtx({ [ADR_PATH]: adrWith('1. Decided.', dosDonts) });
+    await rules['adr-numbered-dos-donts'].check(ctx);
+    expect(violations.some((v) => /sits outside the "### Don'ts" subsection/.test(v.message))).toBe(true);
   });
 });
 

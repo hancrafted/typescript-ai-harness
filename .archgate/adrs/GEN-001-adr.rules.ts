@@ -2,9 +2,9 @@
 
 // GEN-001 — ADR Contract: the meta-rules governing ADR markdown files under
 // .archgate/adrs/, their companion .rules.ts files, and the .claude/rules
-// runtime-loading symlinks. All twelve rules are errors (GEN-001 §7); there is
-// no migration epoch — an ADR conforms fully or the build fails. Further rules
-// or a tier change land only by deliberate ADR amendment.
+// runtime-loading symlinks. All rules run at error (GEN-001 §7); there is no
+// migration epoch — an ADR conforms fully or the build fails. Further rules or
+// a tier change land only by deliberate ADR amendment.
 const ADR_MD_GLOB = '.archgate/adrs/*.md';
 const RULES_GLOB = '.archgate/adrs/*.rules.ts';
 const ADRS_DIR = '.archgate/adrs/';
@@ -25,6 +25,11 @@ const REQUIRED_SECTIONS = [
   '## Compliance and Enforcement',
   '## References',
 ];
+// Subsection headings inside ## Do's and Don'ts — the structural break that
+// makes the Don'ts ordered list restart at 1 when rendered; bare adjacent
+// ordered lists merge and the Don'ts number on from the Do's.
+const DOS_HEADING_RE = /^### Do's[ \t]*$/;
+const DONTS_HEADING_RE = /^### Don'ts[ \t]*$/;
 
 function basename(p: string): string {
   return p.split('/').pop() ?? p;
@@ -434,17 +439,47 @@ export default {
 
     'adr-numbered-dos-donts': {
       description:
-        "The DO and DON'T blocks are each a sequential ordered list restarting at 1, every item keeping its bold **DO** / **DON'T** prefix.",
+        "The Do's and Don'ts section carries exactly one ### Do's and one ### Don'ts heading, Do's first; each block sits under its own heading as a sequential ordered list restarting at 1, every item keeping its bold **DO** / **DON'T** prefix.",
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
         for (const file of files) {
           const section = getSection(await ctx.readFile(file), "## Do's and Don'ts");
           if (section === null) continue;
+          const lines = section.split('\n');
+          const dosAt = lines.flatMap((l, i) => (DOS_HEADING_RE.test(l) ? [i] : []));
+          const dontsAt = lines.flatMap((l, i) => (DONTS_HEADING_RE.test(l) ? [i] : []));
+          let headingsOk = true;
+          if (dosAt.length !== 1) {
+            headingsOk = false;
+            ctx.report.violation({
+              message: `Do's and Don'ts needs exactly one "### Do's" subsection heading, found ${dosAt.length} — without the heading break the rendered numbering never restarts (GEN-001 [adr-numbered-dos-donts]).`,
+              file,
+            });
+          }
+          if (dontsAt.length !== 1) {
+            headingsOk = false;
+            ctx.report.violation({
+              message: `Do's and Don'ts needs exactly one "### Don'ts" subsection heading, found ${dontsAt.length} — without the heading break the rendered numbering never restarts (GEN-001 [adr-numbered-dos-donts]).`,
+              file,
+            });
+          }
+          if (headingsOk && dosAt[0] > dontsAt[0]) {
+            headingsOk = false;
+            ctx.report.violation({
+              message: `"### Do's" must precede "### Don'ts" in the Do's and Don'ts section (GEN-001 [adr-numbered-dos-donts]).`,
+              file,
+            });
+          }
           const doNums: number[] = [];
           const dontNums: number[] = [];
+          let zone: 'none' | 'dos' | 'donts' | 'other' = 'none';
           let bad = false;
-          for (const line of section.split('\n')) {
+          for (const line of lines) {
+            if (/^###\s/.test(line)) {
+              zone = DOS_HEADING_RE.test(line) ? 'dos' : DONTS_HEADING_RE.test(line) ? 'donts' : 'other';
+              continue;
+            }
             if (/^[-*+]\s+\*\*(DO|DON'T)\*\*/.test(line)) {
               ctx.report.violation({
                 message: `Do's and Don'ts item '${line.trim().slice(0, 50)}' is an unordered bullet — blocks must be ordered lists (GEN-001 [adr-numbered-dos-donts]).`,
@@ -454,7 +489,16 @@ export default {
               continue;
             }
             const m = line.match(/^(\d+)\.\s+\*\*(DO|DON'T)\*\*/);
-            if (m) (m[2] === 'DO' ? doNums : dontNums).push(Number(m[1]));
+            if (!m) continue;
+            const isDo = m[2] === 'DO';
+            (isDo ? doNums : dontNums).push(Number(m[1]));
+            if (headingsOk && zone !== (isDo ? 'dos' : 'donts')) {
+              ctx.report.violation({
+                message: `A **${m[2]}** item sits outside the "### ${isDo ? "Do's" : "Don'ts"}" subsection: '${line.trim().slice(0, 50)}' (GEN-001 [adr-numbered-dos-donts]).`,
+                file,
+              });
+              bad = true;
+            }
           }
           if (bad) continue;
           if (!checkSequential(doNums)) {
