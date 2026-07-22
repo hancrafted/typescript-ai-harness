@@ -26,7 +26,18 @@ export type Action =
   | { kind: 'mergePackageJson'; patch: PackageJsonPatch }
   | { kind: 'appendLines'; path: string; lines: string[] }
   | { kind: 'installDeps'; dev: string[] }
-  | { kind: 'runCommand'; command: string; args: string[] };
+  | { kind: 'runCommand'; command: string; args: string[] }
+  // Copy a bundled-asset (sub)tree into the Target (ADR-0010 §5). `from` is an
+  // absolute path into the CLI's captured bundle (the plan resolves it, #47/#48);
+  // `to` is Target-relative. Tool-owned: overwritten on every run (ADR-0010 §4).
+  | { kind: 'copyAsset'; from: string; to: string }
+  // Create a REAL relative symlink at Target-relative `path`, pointing at
+  // `target` — a relative path written verbatim into the link (e.g.
+  // `../../.archgate/adrs/GEN-001-adr.md`). Real-symlink-only, never a copied
+  // body: a copy would let archgate open the file and invert its
+  // `adr-claude-rules-symlink` check, turning every ADR into a false violation
+  // (ADR-0010 §5). Creation failure is loud — never a copy fallback.
+  | { kind: 'symlink'; path: string; target: string };
 
 /** Context handed to every `plan()` — notably the full selection for cross-Integration effects. */
 export interface Ctx {

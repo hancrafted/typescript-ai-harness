@@ -17,9 +17,23 @@ function describe(action: Action): string {
       return `install ${action.dev.join(', ')}`;
     case 'runCommand':
       return `run    ${action.command} ${action.args.join(' ')}`;
+    default:
+      // The bundle-materialisation kinds (ADR-0010 §5), grouped so this switch
+      // stays within the complexity budget; still exhaustive — a new kind that
+      // reaches here won't be assignable to describeBundle's parameter.
+      return describeBundle(action);
   }
 }
 
 function describeWrite(action: Extract<Action, { kind: 'writeFile' }>): string {
   return `${action.overwrite ? 'write ' : 'write?'} ${action.path}`;
+}
+
+function describeBundle(action: Extract<Action, { kind: 'copyAsset' | 'symlink' }>): string {
+  switch (action.kind) {
+    case 'copyAsset':
+      return `copy   ${action.to} (from bundled asset)`;
+    case 'symlink':
+      return `symlink ${action.path} -> ${action.target}`;
+  }
 }
