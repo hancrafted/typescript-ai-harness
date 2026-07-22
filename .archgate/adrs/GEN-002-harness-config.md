@@ -70,12 +70,16 @@ Rejected alternatives:
 
 ## Do's and Don'ts
 
+### Do's
+
 1. **DO** keep harness config in `.typescript-ai-harness.json` at the repo root, parseable JSON, separate from `.archgate/config.json`. (Decision 1, 📜 Rule: `config-json-parses`)
 2. **DO** stamp `version` with the seeding release and restamp it only through the migrate step. (Decision 1, 📜 Rule: `config-version`)
 3. **DO** register a block with one fence plus an owning ADR — never by editing this contract. (Decision 2, 📜 Rule: `config-extension-fenced`)
 4. **DO** keep the config two levels deep, every present block fence-declared and spine-valid. (Decision 3, 📜 Rule: `config-shape-valid`)
 5. **DO** pick the right carve-out: `exempt` (claim-and-waive), entry `exclude` (fall through), `coverage` exclude (leave the strict universe).
 6. **DO** honor the all-or-nothing contract: absent → default; broken → govern nothing.
+
+### Don'ts
 
 1. **DON'T** validate or interpret a block's `rule`/`settings` here — payload vocabulary belongs to its owning ADR.
 2. **DON'T** hardcode a namespace or block name in this contract's rules — legal keys come only from the fences.

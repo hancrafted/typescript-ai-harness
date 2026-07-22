@@ -39,8 +39,12 @@ Rejected alternatives:
 
 ## Do's and Don'ts
 
+### Do's
+
 1. **DO** give every governed markdown file `type`, matching it's `allowedTypes` (Decision 2, 📜 Rule: `frontmatter-floor`)
 2. **DO** set `type: draft` when a file's permanent type is unsettled (`settings.draftEscape` on) — the floor still applies, unlike `exempt`, which lifts it entirely.
+
+### Don'ts
 
 1. **DON'T** invent frontmatter keys outside the floor to mean "type" — `type` is the one OKF anchor this contract owns.
 2. **DON'T** carry both `name` and `title`, or the label the matched entry did not pin.
