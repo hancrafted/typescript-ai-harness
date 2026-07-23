@@ -25,9 +25,11 @@ const TSCONFIG = `{
 
 /**
  * Compose the full Action[] for a selection: baseline actions first, then each
- * selected Integration's plan in registry order (which fixes run-command
- * ordering — interactive `archgate init` before husky). Pure: no IO, safe to
- * render/preview.
+ * selected Integration's plan in registry order (which fixes emission order —
+ * archgate's governance bundle before husky's `npx husky` run-command). Mutates
+ * nothing in the Target and is safe to render/preview; deterministic, though
+ * archgate's plan reads the CLI's *own* bundled asset (read-only) to enumerate
+ * the Core bundle members (ADR-0010).
  */
 export function buildPlan(answers: Answers, cwd: string, yes = false): Action[] {
   const selected = answers.integrations;

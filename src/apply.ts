@@ -8,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { ensurePackageJson, mergePackageJson } from './package-json';
 import type { Action, Exec } from './types';
 
@@ -35,10 +35,10 @@ const ofKind = <K extends Action['kind']>(actions: Action[], kind: K): Extract<A
  * fixed canonical order regardless of emission order: merge package.json →
  * gitignore → install → write configs → copy asset bundles → symlink into them
  * → run commands. Install precedes the run-commands because their binaries
- * (archgate for interactive `init`, husky) must exist first; symlinks are
- * created after the copy so their targets already exist in the copied tree, and
- * both precede the commands so `archgate check` runs against the materialised
- * workspace.
+ * (husky — the only shell-out left after ADR-0005 v4 retired `archgate init`)
+ * must exist first; symlinks are created after the copy so their targets already
+ * exist in the copied tree, and both precede the commands so a hook that runs
+ * `archgate check` sees the materialised workspace.
  * `dryRun` reports every intended change and touches nothing (ADR-0002).
  */
 export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
@@ -95,12 +95,24 @@ function writeStep(actions: Action[], ctx: Resolved): void {
  * Copy a bundled-asset (sub)tree into the Target (ADR-0010 §5). `from` is an
  * absolute path into the CLI's captured bundle; `to` is Target-relative. The
  * bundle is Tool-owned, so existing files are overwritten (`force`) on every run.
+ *
+ * When the resolved source and destination are the same path, the copy is a
+ * byte-identical no-op and is skipped — this is exactly the self-apply case
+ * (ADR-0010 §4), where the CLI runs against this repo and the bundle root is the
+ * live canonical `.archgate/` that `to` also points at. It is not a skip-self
+ * guard (no repo detection): it is IO correctness, since `cpSync` rejects an
+ * identical src/dest with `ERR_FS_CP_EINVAL`. Skipping leaves the governed
+ * source untouched, so self-application yields the clean diff §4 requires.
  */
 function copyAssetStep(actions: Action[], ctx: Resolved): void {
   for (const action of ofKind(actions, 'copyAsset')) {
+    const dest = join(ctx.cwd, action.to);
+    if (resolve(action.from) === resolve(dest)) {
+      ctx.log(`skip   ${action.to} (bundle source is the target — self-apply no-op)`);
+      continue;
+    }
     ctx.log(`copy   ${action.to} (from bundled asset)`);
     if (ctx.dryRun) continue;
-    const dest = join(ctx.cwd, action.to);
     mkdirSync(dirname(dest), { recursive: true });
     cpSync(action.from, dest, { recursive: true, force: true });
   }

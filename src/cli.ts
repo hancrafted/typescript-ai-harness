@@ -50,9 +50,10 @@ async function confirmAndApply(answers: Answers, cwd: string, yes: boolean): Pro
   progress.start('Applying harness');
   await apply(actions, { cwd, exec: realExec, log: (message) => progress.message(message) });
   progress.stop('Harness applied.');
-  if (yes && answers.integrations.includes('archgate')) {
-    // Headless: the direct-write path doesn't install the Claude plugin (US-13),
-    // so point the developer to it. Interactive `archgate init` installs it itself.
+  if (answers.integrations.includes('archgate')) {
+    // Both modes now direct-write and never install the Claude plugin (ADR-0005
+    // v4 retired the `archgate init` shell-out that used to do it interactively),
+    // so point the developer to it regardless of `--yes` (US-13).
     log.info('Run `archgate plugin install` to enable the archgate Claude plugin.');
   }
   outro('Done. Review the changes and commit when ready.');

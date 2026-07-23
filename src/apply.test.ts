@@ -69,6 +69,20 @@ describe('apply — copyAsset', () => {
 
     expect(readFileSync(abs('bundle/f.txt'), 'utf8')).toBe('fresh');
   });
+
+  it('skips a copy whose source IS the destination (self-apply no-op, ADR-0010 §4)', async () => {
+    // On self-apply the bundle root is the live canonical .archgate/, so `from`
+    // resolves to the same path as `to`; cpSync would throw ERR_FS_CP_EINVAL.
+    // Skipping is the byte-identical no-op §4 requires (clean self-apply diff).
+    mkdirSync(abs('.archgate/adrs'), { recursive: true });
+    writeFileSync(abs('.archgate/adrs/GEN-001.md'), '# canonical');
+
+    await expect(
+      run([{ kind: 'copyAsset', from: abs('.archgate/adrs/GEN-001.md'), to: '.archgate/adrs/GEN-001.md' }]),
+    ).resolves.toBeUndefined();
+
+    expect(readFileSync(abs('.archgate/adrs/GEN-001.md'), 'utf8')).toBe('# canonical'); // untouched
+  });
 });
 
 describe('apply — symlink', () => {

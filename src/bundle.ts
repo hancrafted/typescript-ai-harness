@@ -1,5 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
@@ -70,6 +70,38 @@ export function adrTrio(id: string, listing: string[]): string[] {
   return [md, rules, test];
 }
 
+/** The concrete member set a bundle root carries: files to copy, ADR docs to symlink. */
+export interface BundleLayout {
+  /**
+   * Every bundle-root-relative file path the install copies into a Target's
+   * `.archgate/` — each ADR trio member (`adrs/`-relative) then the supporting
+   * files — with forward-slash separators so the derived `to`/link paths are
+   * deterministic across platforms.
+   */
+  files: string[];
+  /**
+   * The `adrs/`-relative `.md` basename of each core ADR, in `ADR_CORE` order:
+   * the source for the one `.claude/rules/<name>.md` symlink each ADR needs
+   * (GEN-001 §6, `adr-claude-rules-symlink`).
+   */
+  adrDocs: string[];
+}
+
+/**
+ * Resolve a bundle root to its concrete member set by listing its `adrs/` dir
+ * once. Both the capture ({@link captureBundle}) and the install (the archgate
+ * plan, #48) enumerate from the *explicit* `ADR_CORE` ids rather than globbing
+ * `adrs/`, so a non-core ADR sitting in the tree can never leak into a release
+ * or an install (ADR-0010 §2). `files` drives the copyAsset actions; `adrDocs`
+ * (each trio's leading `.md`) drives the `.claude/rules/<name>.md` symlinks.
+ */
+export function readBundleLayout(bundleRoot: string, core: string[], supporting: string[]): BundleLayout {
+  const listing = readdirSync(join(bundleRoot, ADRS_DIR));
+  const trios = core.map((id) => adrTrio(id, listing));
+  const adrFiles = trios.flatMap((trio) => trio.map((file) => posix.join(ADRS_DIR, file)));
+  return { files: [...adrFiles, ...supporting], adrDocs: trios.map(([md]) => md) };
+}
+
 export interface CaptureOpts {
   /** The canonical governed source root — `.archgate/`. */
   canonical: string;
@@ -92,11 +124,9 @@ export interface CaptureOpts {
 export function captureBundle(opts: CaptureOpts): string[] {
   const { canonical, assetRoot, core, supporting } = opts;
   rmSync(assetRoot, { recursive: true, force: true });
-  const listing = readdirSync(join(canonical, ADRS_DIR));
-  const adrFiles = core.flatMap((id) => adrTrio(id, listing).map((file) => join(ADRS_DIR, file)));
-  const written = [...adrFiles, ...supporting];
-  for (const relative of written) copyOne(canonical, assetRoot, relative);
-  return written;
+  const { files } = readBundleLayout(canonical, core, supporting);
+  for (const relative of files) copyOne(canonical, assetRoot, relative);
+  return files;
 }
 
 /** Copy one canonical-relative file into the asset at the same relative path. */
