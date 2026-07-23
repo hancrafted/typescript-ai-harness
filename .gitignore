@@ -10,3 +10,5 @@ dist/
 
 # Local InstructionsLoaded hook audit log (.claude/settings.local.json)
 .claude/instructions-loaded.jsonl
+
+.worktrees/

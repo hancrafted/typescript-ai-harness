@@ -31,6 +31,7 @@ The core workflow
 1. **Commits** Make atomic commits using Conventional Commits v1.1.0 format `[feat, fix, docs, refactor, chore](scope): <short summary in present tense>`
 2. **Commit Body** Use the optional commit body to explain the why and how of the change (not the what)by using the Keep a Changelog v1.1.0 categories (Added, Changed, Deprecated, Removed, Fixed, Security) to clearly group the impacts.
 3. **Commit Scope** Keep changes scoped to the domain you are working on.
+3. **Commit Trail** Use `Source: [URL to Github Issue] | [Prompt causing commit]` at the end of commit body, to make tracing back easy.
 
 Example
 ```
