@@ -1,18 +1,21 @@
 ---
 type: design-adr
 title: "Core governance bundle: capture, seed, and self-apply"
-description: "How the harness ships its foundational Governance ADRs into a Target: canonical source in .archgate/, a captured asset, Tool-owned replacement, and a version-gated config seed."
+description: "How the harness ships its foundational Governance ADRs into a Target: an authoring workspace in .archgate/, a captured distribution asset every install reads, unconditional Tool-owned overwrite, and a version-gated config seed."
 ---
 
-# Core governance bundle distribution: canonical source, captured asset, Tool-owned replacement
+# Core governance bundle distribution: authoring workspace, captured distribution asset, unconditional overwrite
 
 The harness now installs its foundational **Governance ADRs** — the **Core governance bundle** — into a **Target project** through the archgate Integration. This ADR owns *how the bundle travels and is written*; [ADR-0005](./0005-archgate-integration.md) owns the archgate Integration behaviour that invokes it, and GEN-001/002/003 own what the ADRs themselves say.
 
 The first consumer is this repo (self-application, ADR-0003); arbitrary Target support is the same code path, with two knowns explicitly deferred (§6, §7).
 
-## 1. Single source of truth, captured — not templated, not symlinked
+## 1. Authoring workspace and captured distribution source — not templated, not symlinked
 
-The canonical bundle stays authored and governed exactly where it lives today: `.archgate/adrs/`. GEN-001 self-hosts there, the `.claude/rules/` symlinks resolve there, and the prose reviews (#38) run there. A scripted, CI-gated **capture** step stages those files into a committed **Bundle asset** that travels with the CLI; the CLI writes the asset into a Target.
+The bundle plays two roles, and separating them is what lets self-application run the same install path a foreign Target runs (§4):
+
+- **`.archgate/` is the authoring workspace** — where the Core bundle is edited, GEN-001 self-hosts, `archgate check` runs live, the `.claude/rules/` symlinks resolve, and the prose reviews (#38) happen. It is the source for the *next* captured release; authoring never moves. It is **not** what any install reads.
+- **The committed Bundle asset (`assets/core-bundle/`) is the distribution source-of-truth** — the immutable, CI-fresh bytes every install reads from, self-apply included. A scripted, CI-gated **capture** step stages the workspace into the asset; the CLI writes the asset into a Target.
 
 Rejected alternatives:
 
@@ -20,7 +23,7 @@ Rejected alternatives:
 - **Templates-as-source** (ADR-0003's literal model, with `.archgate/adrs/` as generated output). It relocates the crown-jewel ADRs *outside* the contract that governs them — no GEN-001 in context on Read, no live `archgate check`, no prose gate — until re-materialised.
 - **Symlinking the canonical files into a template tree.** Blocked on a hard fact: archgate's file reader does not follow symlinks (`ctx.readFile` throws on one — the very mechanic `adr-claude-rules-symlink` relies on). A symlinked `.archgate/adrs/` file is unreadable by `archgate check`, so the ADR errors or goes undiscovered.
 
-The capture is never hand-edited, so it cannot drift; on self-application the asset equals its source, so writing it back is a byte-identical no-op.
+The capture is never hand-edited, so it cannot drift. Because every install — self-apply included — reads the asset and never the live `.archgate/`, `resolveBundleRoot()` returns the asset in dev, self-apply, and published installs alike; `from` is always under the asset and `to` always under the Target's `.archgate/`, so the two never coincide and the copy always runs (§4). The CI freshness guard keeps the asset byte-equal to canonical, so on any committed state that overwrite reproduces the source byte-for-byte — a clean `git diff`.
 
 ## 2. Membership is data — `ADR_CORE` in the Harness build config
 
@@ -42,9 +45,10 @@ The Target footprint is confined to `.archgate/**` plus the `.claude/rules/` sym
 
 ## 4. Lifecycle: Tool-owned bundle, Seeded config, self-apply as the proof
 
-- The bundle is a **Tool-owned** set — every file overwritten on each run, full replacement including `.rules.ts` and `.rules.test.ts`. This is how a brownfield Target (this repo included) is brought up to the current governance release.
+- The bundle is a **Tool-owned** set — every file overwritten on each run via `cpSync(force)`, full replacement including `.rules.ts` and `.rules.test.ts`. The install reads the committed asset in every context (§1), so this overwrite runs **unconditionally**: there is no skip-self guard and no self-apply special case anywhere in the install path. This is how a brownfield Target (this repo included) is brought up to the current governance release. Ownership is a manifest, not a directory wipe: the install overwrites exactly the `ADR_CORE` trios + supporting files and creates their symlinks, so a foreign Target's own non-core ADRs are never touched.
 - `.typescript-ai-harness.json` is a **Seeded config file** — written once if absent, never patched on re-run (GEN-002 §1.2); the migrate/update flow is #11.
-- **Definition of done for the update mechanism:** running the CLI on this repo rewrites its own bundle byte-for-byte, yielding a clean `git diff`. There is no skip-self guard — the dogfood *is* the test that the overwrite path works and is idempotent.
+- **Definition of done for the update mechanism:** `npm run capture` → run the CLI on this repo → a clean `git diff` across `.archgate/**` and `.claude/rules/`. The dogfood *is* the test that the overwrite path works and is idempotent — it runs the same real `cpSync(force)` a foreign Target does (the dogfood script and CI clean-diff guard are #50), not a skipped no-op.
+- **Workflow rule — capture before you install.** Because `.archgate/` is the authoring workspace (§1) *and* the install's destination, running the install over *un-captured* workspace edits reverts them to the last captured bytes. The accepted discipline is **edit `.archgate/` → `npm run capture` → install**; the CI freshness guard (§1) keeps the committed asset byte-equal to canonical on every PR, so on any committed state the dogfood is a clean overwrite and no edit is lost by surprise.
 
 ## 5. Two new declarative Action kinds
 
@@ -71,11 +75,12 @@ Both `*.rules.test.ts` currently import shared fixtures from `test/fixtures/` �
 
 - One canonical byte-source per file, still fully governed by the contract it defines; no second hand-maintained copy to drift.
 - Adding a foundational ADR is a one-line `ADR_CORE` edit; the capture picks it up on the next release.
-- Both install modes become deterministic and idempotent (see ADR-0005 v4), so self-application is a reliable dogfood signal.
+- Both install modes become deterministic and idempotent (see ADR-0005 v4), and self-apply runs the same real `cpSync(force)` overwrite a foreign Target does — so the dogfood is a genuine test of the install path, not a skipped no-op.
 - A brownfield Target is brought to the current governance release in one run.
 
 **Negative:**
 
+- `.archgate/` is both the authoring workspace and the install's destination, so running the install over un-captured workspace edits reverts them to the last captured bytes; mitigated by the edit → capture → install workflow rule (§4) and the CI freshness guard (§1).
 - The published package grows beyond `dist/`: the asset must be staged and kept fresh by a prepack step, CI-gated so it cannot lag the canonical source.
 - The config seed is knowingly broken-on-arrival for a foreign Target whose app version differs, until #11 — the ADR bundle still installs correctly.
 - Windows symlink creation is unsupported until the deferred target-matrix work; the failure is loud, not silent.
@@ -83,7 +88,8 @@ Both `*.rules.test.ts` currently import shared fixtures from `test/fixtures/` �
 
 ## History
 
-- **v1 (this ADR):** establishes the capture model, `harness.config.json`/`ADR_CORE`, Tool-owned bundle replacement with Seeded config, the `copyAsset`/`symlink` Action kinds, and the version-gated seed. Realises GEN-002's deferred "Templates/scaffolding" note.
+- **v1:** establishes the capture model, `harness.config.json`/`ADR_CORE`, Tool-owned bundle replacement with Seeded config, the `copyAsset`/`symlink` Action kinds, and the version-gated seed. Realises GEN-002's deferred "Templates/scaffolding" note.
+- **v2 (#48 always-overwrite):** reframes §1 into two roles — `.archgate/` as the **authoring workspace** (source for the next capture) and the committed asset as the **distribution source-of-truth** every install reads, self-apply included. Consequently `resolveBundleRoot()` returns the asset in dev, self-apply, and published installs alike (superseding #47's "canonical in dev/self-apply"), and the `apply()` path-equality skip plus the canonical-vs-asset branch are removed. §4's definition-of-done becomes capture → install → clean `git diff` with **no skip-self guard**, so the self-apply dogfood runs the real `cpSync(force)` overwrite rather than a skipped no-op (realigning with #50 and #43 user story 18). Adds the capture-before-install workflow rule and records its accepted trade-off (install reverts un-captured workspace edits). ADR-0005 stays v4 — the direct-write model is unchanged; only the install's read-source is made unconditionally the asset.
 
 ## References
 
