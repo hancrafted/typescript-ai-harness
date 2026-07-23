@@ -6,7 +6,17 @@ export default tseslint.config(
   // `assets/**` holds the captured Core bundle — byte copies of `.archgate/**`
   // files, which are themselves eslint-ignored (they answer to archgate, not the
   // repo's lint rules), so the mirror is ignored on the same grounds (ADR-0010 §1).
-  { ignores: ['node_modules/**', 'dist/**', 'coverage/**', '.archgate/**', 'assets/**', '.claude/worktrees/**'] },
+  {
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'coverage/**',
+      '.archgate/**',
+      'assets/**',
+      '.claude/worktrees/**',
+      '.worktrees/**',
+    ],
+  },
   {
     files: ['**/*.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended, tseslint.configs.stylistic],
