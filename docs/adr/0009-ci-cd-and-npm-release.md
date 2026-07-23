@@ -2,7 +2,7 @@
 type: design-adr
 title: "CI/CD and npm release"
 description: "Two GitHub Actions workflows — ci.yml on every push/PR and publish.yml on v* tags — build, verify, and publish the bundled dist to npm."
-status: amended 2026-07-21 — token auth replaced by OIDC trusted publishing
+status: amended 2026-07-23 — CI restructured into three workflows (knip + Trivy, Node 24-only)
 ---
 
 # CI/CD pipeline and npm release process
@@ -39,3 +39,34 @@ The "authenticates directly, provenance automatic" description above is correct 
 - **A rejected trusted-publisher match surfaces as a misleading `E404`/`ENEEDAUTH`, not a clear diagnostic** ([npm/cli#9088](https://github.com/npm/cli/issues/9088)). Once the workflow is in the shape above (verified by an `id-token` env echo + npm ≥ 11.5.1), a remaining auth error is almost always the **npmjs.com trusted-publisher config**, not the workflow: the org/user, repo, workflow filename (`publish.yml`, no path, no stray space), and environment (must be blank) must match the OIDC claim exactly. Re-trigger after fixing the config with `gh run rerun <id>` — the OIDC token is minted fresh per run, so no new tag is needed.
 
 Net: the token → OIDC decision stands and the security win is real, but the pipeline needs the `_authToken` strip step and the trusted publisher must be **verified as actually registered** (not merely assumed) before the first tag.
+
+## Update — 2026-07-23: CI split into three workflows (knip + Trivy, Node 24-only)
+
+The original design put verify + build + boot-smoke in **one job** whose checks hid behind a single `npm run verify` step (`archgate && eslint && prettier && tsc && vitest`), where `&&` masked *which* check failed. The pipeline "felt like one stage" for a concrete reason: GitHub Actions has no first-class *stage* — only **workflow → job → step** — so the fix is not "add stages" but to split the masked step into named steps and separate concerns by *workflow*. Two goals drove the restructure: **clarity** (see each check) and **security** (a stated goal the original CI never addressed — no `permissions:` block, no scanning).
+
+**Correctness stays in one job.** Splitting build + boot-smoke into their own parallel job was considered and rejected: on this small repo `npm ci` dominates and the checks take seconds, so a second job buys ~seconds of wall-clock at the cost of a second install and more YAML. The single `verify` job now runs its checks as **named steps** in fail-fast order — cheapest / likeliest-to-fail first, dependency order last: `prettier → eslint → tsc → vitest → knip → archgate → capture-freshness → build → smoke`. **knip** joins this tier — an unused-files / dependencies / exports check that, like tsc and eslint, is deterministic and needs `node_modules`, so it runs on every trigger.
+
+**Security is a separate workflow, because a security scan is a different *kind* of check.** A deterministic check (tsc, eslint, knip) yields the same verdict for a given commit forever; a **security scan** (Trivy) consults an external, evolving vulnerability database, so a clean commit can turn red overnight with no code change. That single property dictates placement:
+
+- `security.yml` runs **Trivy** (vulnerable-dependency, secret, and misconfiguration scan) on `pull_request` plus a **nightly `schedule`**. Trivy reads `package-lock.json` directly, so this job needs **no `npm ci`** — it is checkout + scan, running in parallel with `verify` at the PR gate. The nightly run is the only trigger that can catch a newly-disclosed CVE in code that has not changed.
+- Because `security.yml` is `on: pull_request + schedule`, a bare WIP-branch **push never triggers it** — the "lean push, gate at PR" policy falls out of the trigger config with no `if:` conditions. The inner dev loop stays fast; every vulnerability is still caught before merge.
+- Trivy **gates** (fails the run) on HIGH/CRITICAL findings and warns on the rest, on both the PR gate and release.
+
+**Per-trigger matrix** — the answer to "does every check run everywhere?":
+
+| Check | push (WIP) | pull_request (gate) | v* tag (release) | nightly |
+| --- | --- | --- | --- | --- |
+| verify set + knip + build + smoke | ✅ | ✅ | ✅ | — |
+| Trivy | — | ✅ | ✅ | ✅ (`main`) |
+
+The release path is a **superset** of the gate: `publish.yml` re-runs verify (incl. knip) and Trivy before build + publish, so a `v*` tag can never ship code that skipped the merge-gate checks or carries a known HIGH/CRITICAL vulnerability.
+
+**This amends the original matrix decision:** the fast path drops **Node 22** and runs **Node 24 only** — 24 is Active LTS, `publish.yml` already pins it, and running every push twice was pure cost for a tool whose runtime floor we actually test at 24. `package.json` `engines` narrows from `>=20` to `>=24` to stop advertising untested versions.
+
+**Smaller hardening decisions:**
+
+- `permissions: contents: read` at each workflow's top (least privilege) — the original CI ran with the default, broadly-scoped token.
+- Actions stay on the readable `@v4` **major tag** plus **Dependabot** to bump them, rather than SHA-pinning. SHA-pinning is stricter — a mutable tag can be re-pointed at malicious code — but higher-maintenance; for a public repo of this size the tag + Dependabot posture is the right trade, to be revisited if the threat model changes.
+- `ci.yml` triggers narrow to `push: branches: [main]` + `pull_request`, ending the double-run where a push to a branch with an open PR fired CI twice.
+
+The two-workflows → three-workflows change does **not** touch the OIDC trusted-publishing decisions above; `publish.yml` gains a knip + Trivy pass, but its auth and release-trigger design stand.
