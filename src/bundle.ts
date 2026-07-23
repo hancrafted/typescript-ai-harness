@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,15 +15,17 @@ import { fileURLToPath } from 'node:url';
 const ADRS_DIR = 'adrs';
 
 /**
- * Choose the bundle root from a project root: the live canonical `.archgate/`
- * when its `adrs/` tree is present (dev and self-apply, where the governed
- * source sits beside the running code), else the shipped `assets/core-bundle/`
- * asset — a published install never receives `.archgate/`, only the captured
- * asset. Pure (`exists` is injected) so both arms are testable directly. (ADR-0010 §1)
+ * The bundle root for a project root: **always** the committed
+ * `assets/core-bundle/` asset. The install reads the captured asset in every
+ * context — dev, self-apply, and a published install alike — so self-apply runs
+ * the same real `cpSync(force)` overwrite a foreign Target does, with no
+ * canonical-vs-asset branch and no skip (#48). `.archgate/` is the authoring
+ * workspace (the source for the *next* capture), not what the install reads; the
+ * committed asset is the distribution source-of-truth (ADR-0010 §1 v2), kept
+ * byte-equal to canonical by the CI freshness guard so self-apply is a clean
+ * overwrite. Pure and total — no filesystem probe. (ADR-0010 §1)
  */
-export function selectBundleRoot(projectRoot: string, exists: (path: string) => boolean = existsSync): string {
-  const canonical = join(projectRoot, '.archgate');
-  if (exists(join(canonical, ADRS_DIR))) return canonical;
+export function selectBundleRoot(projectRoot: string): string {
   return join(projectRoot, 'assets', 'core-bundle');
 }
 
@@ -38,12 +40,14 @@ export function projectRootOf(moduleUrl: string): string {
 }
 
 /**
- * The absolute bundle root for the running CLI. In dev (tsx) this module is
- * `src/bundle.ts`; bundled it is `dist/cli.mjs` — both sit one level under the
- * project/package root, so {@link projectRootOf} yields that root either way,
- * and {@link selectBundleRoot} then picks canonical or asset. The consumer (the
- * plan rewrite, #48) reads this to source the files its copyAsset/symlink
- * Actions install.
+ * The absolute bundle root for the running CLI: the committed
+ * `assets/core-bundle/` asset. In dev (tsx) this module is `src/bundle.ts`;
+ * bundled it is `dist/cli.mjs` — both sit one level under the project/package
+ * root, so {@link projectRootOf} yields that root either way, and
+ * {@link selectBundleRoot} appends the asset path. The consumer (the archgate
+ * plan, #48) reads this to source the files its copyAsset/symlink Actions
+ * install; because the source is always under the asset and the destination
+ * always under `.archgate/`, the two never coincide and the copy always runs.
  */
 export function resolveBundleRoot(): string {
   return selectBundleRoot(projectRootOf(import.meta.url));
@@ -117,9 +121,10 @@ export interface CaptureOpts {
  * Stage the Core bundle from `canonical` into `assetRoot`, returning the
  * bundle-relative paths written. The asset is **Tool-owned**: the target is
  * wiped first, so a member dropped from `ADR_CORE` leaves no stale file behind,
- * and each surviving file is a byte copy of its canonical source — making
- * self-application a byte-identical no-op and letting a CI guard diff the two
- * (ADR-0010 §1, §4).
+ * and each surviving file is a byte copy of its canonical source — keeping the
+ * committed asset byte-equal to canonical, which a CI guard diffs to block drift
+ * and which makes the self-apply overwrite (the install reads this asset)
+ * reproduce the source byte-for-byte, a clean `git diff` (ADR-0010 §1, §4).
  */
 export function captureBundle(opts: CaptureOpts): string[] {
   const { canonical, assetRoot, core, supporting } = opts;

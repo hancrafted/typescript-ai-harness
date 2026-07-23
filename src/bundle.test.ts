@@ -15,23 +15,23 @@ describe('projectRootOf', () => {
   });
 });
 
-describe('selectBundleRoot', () => {
-  const root = '/proj';
-
-  it('returns the live canonical .archgate when it holds an adrs/ tree (dev + self-apply)', () => {
-    const canonicalAdrs = join(root, '.archgate', 'adrs');
-    expect(selectBundleRoot(root, (path) => path === canonicalAdrs)).toBe(join(root, '.archgate'));
-  });
-
-  it('falls back to the shipped assets/core-bundle asset when .archgate is absent (published install)', () => {
-    expect(selectBundleRoot(root, () => false)).toBe(join(root, 'assets', 'core-bundle'));
+describe('selectBundleRoot — always the committed asset (#48 always-overwrite)', () => {
+  it('returns the assets/core-bundle root and never probes the filesystem, so a live .archgate/ is never chosen (dev, self-apply, published install alike)', () => {
+    // The install reads the committed asset in every context, so self-apply runs
+    // the same real cpSync(force) overwrite a foreign Target does — no
+    // canonical-vs-asset branch, no skip. .archgate/ is the authoring workspace,
+    // not what the install reads (ADR-0010 §1 v2). The function takes no `exists`
+    // probe, so ".archgate/ present" is structurally unrepresentable, not a
+    // second case to assert.
+    const root = '/proj';
+    expect(selectBundleRoot(root)).toBe(join(root, 'assets', 'core-bundle'));
   });
 });
 
-describe('resolveBundleRoot — this repo is dev, so it resolves the live canonical source', () => {
-  it('returns a real .archgate root that actually holds the adrs/ tree', () => {
+describe('resolveBundleRoot — resolves the committed asset in dev, self-apply, and published installs alike', () => {
+  it('returns a real assets/core-bundle root that actually holds the adrs/ tree', () => {
     const root = resolveBundleRoot();
-    expect(root.endsWith('.archgate')).toBe(true);
+    expect(root.endsWith(join('assets', 'core-bundle'))).toBe(true);
     expect(existsSync(join(root, 'adrs'))).toBe(true);
   });
 });

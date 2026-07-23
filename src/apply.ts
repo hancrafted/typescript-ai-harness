@@ -8,7 +8,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { ensurePackageJson, mergePackageJson } from './package-json';
 import type { Action, Exec } from './types';
 
@@ -93,24 +93,22 @@ function writeStep(actions: Action[], ctx: Resolved): void {
 
 /**
  * Copy a bundled-asset (sub)tree into the Target (ADR-0010 §5). `from` is an
- * absolute path into the CLI's captured bundle; `to` is Target-relative. The
- * bundle is Tool-owned, so existing files are overwritten (`force`) on every run.
+ * absolute path into the CLI's captured bundle (always under
+ * `assets/core-bundle/`, #48); `to` is Target-relative (always under
+ * `.archgate/`). The bundle is Tool-owned, so existing files are overwritten
+ * (`force`) on every run.
  *
- * When the resolved source and destination are the same path, the copy is a
- * byte-identical no-op and is skipped — this is exactly the self-apply case
- * (ADR-0010 §4), where the CLI runs against this repo and the bundle root is the
- * live canonical `.archgate/` that `to` also points at. It is not a skip-self
- * guard (no repo detection): it is IO correctness, since `cpSync` rejects an
- * identical src/dest with `ERR_FS_CP_EINVAL`. Skipping leaves the governed
- * source untouched, so self-application yields the clean diff §4 requires.
+ * The copy is **unconditional** — there is no self-apply special case. Because
+ * the source is always the committed asset and the destination always the
+ * Target's `.archgate/`, the two never coincide, so the same `cpSync(force)` runs
+ * for self-apply and a foreign Target alike (ADR-0010 §1/§4 v2). This is what
+ * makes the self-apply dogfood the actual overwrite test rather than a skipped
+ * no-op: the CI freshness guard keeps the asset byte-equal to canonical, so on a
+ * committed state the overwrite yields a clean `git diff`.
  */
 function copyAssetStep(actions: Action[], ctx: Resolved): void {
   for (const action of ofKind(actions, 'copyAsset')) {
     const dest = join(ctx.cwd, action.to);
-    if (resolve(action.from) === resolve(dest)) {
-      ctx.log(`skip   ${action.to} (bundle source is the target — self-apply no-op)`);
-      continue;
-    }
     ctx.log(`copy   ${action.to} (from bundled asset)`);
     if (ctx.dryRun) continue;
     mkdirSync(dirname(dest), { recursive: true });

@@ -195,8 +195,10 @@ describe('run — external commands', () => {
 
 // ADR-0005 v4: interactive and --yes emit the same Actions, so both are asserted
 // against one identical set of expectations. The bundle is copied from this repo's
-// live canonical .archgate/ (resolveBundleRoot picks canonical in dev), so the
-// target ends up with the real GEN-001/002/003 trios and .claude/rules symlinks.
+// committed assets/core-bundle asset (resolveBundleRoot always returns the asset,
+// #48) — kept byte-equal to canonical by the freshness guard — so the target ends
+// up with the real GEN-001/002/003 trios and .claude/rules symlinks, and each
+// copyAsset.from points into the asset, not the live .archgate/.
 describe.each([
   { label: 'interactive (no --yes)', yes: false },
   { label: 'headless (--yes)', yes: true },
