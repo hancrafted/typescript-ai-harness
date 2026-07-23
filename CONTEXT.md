@@ -115,3 +115,17 @@ _Avoid_: eval integration (premature — not yet an Integration), test suite, LL
 **Context artifact**:
 An LLM-consumed, low-churn, authored-to-steer markdown file — a Governance ADR, a skill, or AGENTS.md (more to come). Three defining traits: consumed as model context, written to steer model behaviour, and changed only to correct drift or track a model change (not per-feature). The class the Eval harness layer targets.
 _Avoid_: prompt, doc, governed file (broader — not limited to markdown)
+
+## CI/CD
+
+**Stage**:
+Not a real thing in GitHub Actions — there is no first-class *stage*, only **workflow → job → step**. This repo separates concerns by *workflow* (one file per concern: correctness, security, release) and, where execution order is required, by a **job in a `needs:` DAG**. Say what you mean — workflow, job, or step.
+_Avoid_: stage (unless you explicitly mean "a job in a `needs:` DAG")
+
+**Deterministic check**:
+A CI check whose verdict depends only on the committed code, so a given commit always passes or fails the same way (prettier, eslint, tsc, vitest, knip, archgate, build, boot-smoke). Runs on every trigger — push, PR, release — because a cheap, repeatable check has no reason to be skipped.
+_Avoid_: correctness check, static check (when the contrast with a Security scan matters)
+
+**Security scan**:
+A CI check whose verdict can change over time for unchanged code, because it consults an external, evolving source — Trivy against its vulnerability database. Concentrated at the PR gate, release, and a nightly `schedule`, and kept off the WIP-push path, precisely because a clean commit can turn red overnight.
+_Avoid_: audit, vuln check (when the contrast with a Deterministic check matters)
