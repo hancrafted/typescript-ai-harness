@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { adrTrio, captureBundle, projectRootOf, resolveBundleRoot, selectBundleRoot } from './bundle';
+import { adrTrio, captureBundle, projectRootOf, readBundleLayout, resolveBundleRoot, selectBundleRoot } from './bundle';
 
 // The bundle module is the seam #47 must make verifiable on its own: the
 // dev-vs-shipped root choice, the per-ADR trio discovery, and the byte-faithful
@@ -64,6 +64,64 @@ describe('adrTrio', () => {
 
   it('throws when the id is absent from the listing', () => {
     expect(() => adrTrio('GEN-404', listing)).toThrow(/GEN-404/);
+  });
+});
+
+describe('readBundleLayout', () => {
+  let root: string;
+  const trio = (slug: string): string[] => [`${slug}.md`, `${slug}.rules.ts`, `${slug}.rules.test.ts`];
+  const seed = (...files: string[]): void => {
+    const adrs = join(root, 'adrs');
+    mkdirSync(adrs, { recursive: true });
+    for (const file of files) writeFileSync(join(adrs, file), '');
+  };
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'harness-layout-'));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it('enumerates each core ADR trio (adrs/-relative, forward-slash) then the supporting files', () => {
+    seed(...trio('GEN-001-adr'), ...trio('GEN-002-harness-config'));
+    writeFileSync(join(root, 'support.d.ts'), '');
+
+    const { files } = readBundleLayout(root, ['GEN-001', 'GEN-002'], ['support.d.ts']);
+
+    expect(files).toEqual([
+      'adrs/GEN-001-adr.md',
+      'adrs/GEN-001-adr.rules.ts',
+      'adrs/GEN-001-adr.rules.test.ts',
+      'adrs/GEN-002-harness-config.md',
+      'adrs/GEN-002-harness-config.rules.ts',
+      'adrs/GEN-002-harness-config.rules.test.ts',
+      'support.d.ts',
+    ]);
+  });
+
+  it('exposes each core ADR .md basename for the .claude/rules symlinks, in ADR_CORE order', () => {
+    seed(...trio('GEN-001-adr'), ...trio('GEN-002-harness-config'));
+
+    const { adrDocs } = readBundleLayout(root, ['GEN-002', 'GEN-001'], []);
+
+    expect(adrDocs).toEqual(['GEN-002-harness-config.md', 'GEN-001-adr.md']);
+  });
+
+  it('enumerates from the explicit ADR_CORE list, not whatever sits in adrs/ (no leakage, ADR-0010 §2)', () => {
+    seed(...trio('GEN-001-adr'), ...trio('GEN-999-stray'));
+
+    const { files, adrDocs } = readBundleLayout(root, ['GEN-001'], []);
+
+    expect(files).toEqual(['adrs/GEN-001-adr.md', 'adrs/GEN-001-adr.rules.ts', 'adrs/GEN-001-adr.rules.test.ts']);
+    expect(adrDocs).toEqual(['GEN-001-adr.md']);
+  });
+
+  it('propagates the loud trio failure when a core member is missing', () => {
+    seed('GEN-001-adr.md'); // trio incomplete — only the .md, no rules siblings
+
+    expect(() => readBundleLayout(root, ['GEN-001'], [])).toThrow(/GEN-001/);
   });
 });
 

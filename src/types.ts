@@ -43,7 +43,7 @@ export type Action =
 export interface Ctx {
   cwd: string;
   selected: IntegrationId[];
-  /** The `--yes` flag: headless, non-interactive. Lets an Integration pick a headless-safe path (e.g. archgate direct-writes instead of shelling out to interactive `archgate init` — ADR-0005). */
+  /** The `--yes` flag: headless, non-interactive. Still threaded through the plan (ADR-0005 v4), though archgate no longer branches on it — both modes direct-write the same Actions; `cli` uses it only to skip the interactive confirm. */
   yes: boolean;
 }
 
@@ -90,6 +90,11 @@ export interface Integration {
   devDependencies: string[];
   /** Imperative, possibly-nested sub-option prompts (the extension point). */
   promptSubOptions?(): Promise<SubChoice>;
-  /** Pure: maps a resolved choice to declarative Actions. */
+  /**
+   * Maps a resolved choice to declarative Actions. Mutates nothing in the Target
+   * and is safe for preview/dry-run; an Integration MAY read the CLI's own
+   * shipped assets read-only (archgate lists its bundled Core ADRs — ADR-0010).
+   * All Target IO stays in `apply()`, the single write chokepoint (ADR-0004).
+   */
   plan(ctx: Ctx, choice: SubChoice): Action[];
 }
