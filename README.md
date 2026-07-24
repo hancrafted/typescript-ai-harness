@@ -223,13 +223,31 @@ that exercises the published artifact rather than source. It runs after `npm run
 npm run build && npm run smoke
 ```
 
+### CI/CD pipeline
+
+Three GitHub Actions workflows split CI **one concern per file** (ADR-0009), each with its
+own trigger and its own least-privilege token:
+
+| Workflow | Concern | Runs on | What it does |
+| --- | --- | --- | --- |
+| **`ci.yml`** | Correctness | push to `main` · every PR | `verify` as one **named step per check** (in cheapest-/likeliest-to-fail-first order — `prettier → eslint → tsc → vitest → knip → archgate`), then `build` + `boot-smoke` of the bundle. Node 24 only. |
+| **`security.yml`** | Security | every PR · **weekly** (Mon 03:00 UTC) | A **Trivy** filesystem scan — vulnerable deps, leaked secrets, misconfig. Reports all severities, **fails on HIGH/CRITICAL**. No `npm ci`, so it runs in parallel with `verify`. |
+| **`publish.yml`** | Release | `v*` git tag | Re-runs `verify` **and** the Trivy gate, then `build` + `npm publish` with provenance. A release is a strict superset of the merge gate. |
+
+The organising rule: **deterministic checks** (`prettier`, `eslint`, `tsc`, `vitest`, `knip`,
+`archgate` — same source in, same result out) run on push, PR, and release; the **time-varying
+security scan** (its verdict depends on an external CVE feed) concentrates on PRs, at release,
+and on a weekly schedule — never on a work-in-progress push, so the inner loop stays fast. The
+weekly run still catches a newly-disclosed CVE in an otherwise-unchanged dependency when nobody
+is pushing. Feature branches with no open PR get no CI by design — open the PR to get the gate.
+
+> The build/publish plumbing is repo-local release tooling and is **not** shipped into target
+> projects (ADR-0003). Targets receive the harness, not these workflows.
+
 ### Releasing
 
-Releases are cut manually. Three workflows split CI by concern (ADR-0009): `ci.yml`
-verifies (each check its own named step, Node 24), builds, and boot-smokes on pushes to
-`main` and every PR; `security.yml` runs a Trivy scan (vulnerable deps, leaked secrets,
-misconfig) on PRs and weekly; a `v*` tag triggers `publish.yml`, which re-runs verify +
-Trivy, rebuilds, and publishes to npm with provenance. To release:
+Releases are cut manually — bump, tag, push. The tag is what triggers `publish.yml` (above). To
+release:
 
 ```bash
 npm version <patch|minor|major>   # bumps package.json and creates the vX.Y.Z tag
