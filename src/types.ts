@@ -26,13 +26,24 @@ export type Action =
   | { kind: 'mergePackageJson'; patch: PackageJsonPatch }
   | { kind: 'appendLines'; path: string; lines: string[] }
   | { kind: 'installDeps'; dev: string[] }
-  | { kind: 'runCommand'; command: string; args: string[] };
+  | { kind: 'runCommand'; command: string; args: string[] }
+  // Copy a bundled-asset (sub)tree into the Target (ADR-0010 §5). `from` is an
+  // absolute path into the CLI's captured bundle (the plan resolves it, #47/#48);
+  // `to` is Target-relative. Tool-owned: overwritten on every run (ADR-0010 §4).
+  | { kind: 'copyAsset'; from: string; to: string }
+  // Create a REAL relative symlink at Target-relative `path`, pointing at
+  // `target` — a relative path written verbatim into the link (e.g.
+  // `../../.archgate/adrs/GEN-001-adr.md`). Real-symlink-only, never a copied
+  // body: a copy would let archgate open the file and invert its
+  // `adr-claude-rules-symlink` check, turning every ADR into a false violation
+  // (ADR-0010 §5). Creation failure is loud — never a copy fallback.
+  | { kind: 'symlink'; path: string; target: string };
 
 /** Context handed to every `plan()` — notably the full selection for cross-Integration effects. */
 export interface Ctx {
   cwd: string;
   selected: IntegrationId[];
-  /** The `--yes` flag: headless, non-interactive. Lets an Integration pick a headless-safe path (e.g. archgate direct-writes instead of shelling out to interactive `archgate init` — ADR-0005). */
+  /** The `--yes` flag: headless, non-interactive. Still threaded through the plan (ADR-0005 v4), though archgate no longer branches on it — both modes direct-write the same Actions; `cli` uses it only to skip the interactive confirm. */
   yes: boolean;
 }
 
@@ -79,6 +90,11 @@ export interface Integration {
   devDependencies: string[];
   /** Imperative, possibly-nested sub-option prompts (the extension point). */
   promptSubOptions?(): Promise<SubChoice>;
-  /** Pure: maps a resolved choice to declarative Actions. */
+  /**
+   * Maps a resolved choice to declarative Actions. Mutates nothing in the Target
+   * and is safe for preview/dry-run; an Integration MAY read the CLI's own
+   * shipped assets read-only (archgate lists its bundled Core ADRs — ADR-0010).
+   * All Target IO stays in `apply()`, the single write chokepoint (ADR-0004).
+   */
   plan(ctx: Ctx, choice: SubChoice): Action[];
 }

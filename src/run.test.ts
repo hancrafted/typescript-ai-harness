@@ -1,4 +1,13 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,7 +171,7 @@ describe('run — eslint rule injection', () => {
 });
 
 describe('run — external commands', () => {
-  it('installs pinned archgate before the run-commands, ordered archgate init then husky (interactive)', async () => {
+  it('installs pinned archgate and never shells out to `archgate init` (v4 direct-write)', async () => {
     await run(FULL, { cwd, exec }); // no --yes → interactive
 
     const install = npmInstall();
@@ -174,33 +183,59 @@ describe('run — external commands', () => {
     expect(install?.args.some((a) => a.startsWith('archgate@'))).toBe(true);
     expect(install?.args).not.toContain('archgate');
 
+    // v4 retired the `archgate init` shell-out; husky's `npx husky` is the only
+    // run-command left, and install still precedes it (its binary must exist).
     const cmdLine = (c: { command: string; args: string[] }) => `${c.command} ${c.args.join(' ')}`;
-    const archgateIdx = calls.findIndex((c) => cmdLine(c) === 'npx archgate init');
+    expect(calls.some((c) => cmdLine(c) === 'npx archgate init')).toBe(false);
     const huskyIdx = calls.findIndex((c) => cmdLine(c) === 'npx husky');
-    expect(archgateIdx).toBeGreaterThanOrEqual(0);
-    expect(huskyIdx).toBeGreaterThan(archgateIdx);
-    // install precedes the run-commands (their binaries must exist first).
-    expect(calls.findIndex((c) => c.args[0] === 'install')).toBeLessThan(archgateIdx);
+    expect(huskyIdx).toBeGreaterThanOrEqual(0);
+    expect(calls.findIndex((c) => c.args[0] === 'install')).toBeLessThan(huskyIdx);
   });
 });
 
-describe('run — archgate interactive (no --yes)', () => {
-  it('shells out to bare `archgate init` and direct-writes nothing itself', async () => {
-    await run(FULL, { cwd, exec });
-    // Interactive: archgate owns onboarding via its own init; the tool writes no
-    // snapshot files (with a stubbed exec, init is a no-op, so none appear).
-    expect(calls.some((c) => `${c.command} ${c.args.join(' ')}` === 'npx archgate init')).toBe(true);
-    expect(has('.archgate/config.json')).toBe(false);
-    expect(has('.claude/settings.local.json')).toBe(false);
-    expect(has('.archgate/adrs/.gitkeep')).toBe(false);
-    // No `--editor`: archgate drives its own editor prompt.
+// ADR-0005 v4: interactive and --yes emit the same Actions, so both are asserted
+// against one identical set of expectations. The bundle is copied from this repo's
+// committed assets/core-bundle asset (resolveBundleRoot always returns the asset,
+// #48) — kept byte-equal to canonical by the freshness guard — so the target ends
+// up with the real GEN-001/002/003 trios and .claude/rules symlinks, and each
+// copyAsset.from points into the asset, not the live .archgate/.
+describe.each([
+  { label: 'interactive (no --yes)', yes: false },
+  { label: 'headless (--yes)', yes: true },
+])('run — archgate v4 unified direct-write · $label', ({ yes }) => {
+  const CORE = ['GEN-001-adr', 'GEN-002-harness-config', 'GEN-003-frontmatter'];
+
+  it('materialises each core ADR trio + supporting files under .archgate/, never shelling out', async () => {
+    await run(FULL, { cwd, exec, yes });
+
+    for (const id of CORE) {
+      expect(has(`.archgate/adrs/${id}.md`)).toBe(true);
+      expect(has(`.archgate/adrs/${id}.rules.ts`)).toBe(true);
+      expect(has(`.archgate/adrs/${id}.rules.test.ts`)).toBe(true);
+    }
+    expect(has('.archgate/harness-config-core.d.ts')).toBe(true);
+    expect(has('.archgate/harness-config-extension.d.ts')).toBe(true);
+    expect(has('.archgate/harness-config-fixtures.ts')).toBe(true);
+    // Neither mode invokes `archgate init` or passes `--editor` (editor fixed to claude).
+    expect(calls.some((c) => c.args.includes('init'))).toBe(false);
     expect(calls.some((c) => c.args.includes('--editor'))).toBe(false);
   });
-});
 
-describe('run — archgate headless direct-write (--yes)', () => {
-  it('seeds config, Claude settings, and the rules.d.ts ignore, never shelling out', async () => {
-    await run(FULL, { cwd, exec, yes: true });
+  it('links each ADR into .claude/rules/ as a REAL symlink, not a copied body (adr-claude-rules-symlink)', async () => {
+    await run(FULL, { cwd, exec, yes });
+
+    const link = join(cwd, '.claude/rules/gen-001-adr.md');
+    expect(lstatSync(link).isSymbolicLink()).toBe(true); // a copy would invert archgate's rule
+    expect(readlinkSync(link)).toBe('../../.archgate/adrs/GEN-001-adr.md'); // relative, stored verbatim
+    expect(readFileSync(link, 'utf8')).toBe(read('.archgate/adrs/GEN-001-adr.md')); // resolves through
+    // Lowercased basename, matching how the symlink is created and what archgate's
+    // adr-claude-rules-symlink rule expects — uppercase here only passed on a
+    // case-insensitive macOS FS and broke on case-sensitive Linux CI.
+    for (const id of CORE) expect(has(`.claude/rules/${id.toLowerCase()}.md`)).toBe(true);
+  });
+
+  it('seeds config.json + Claude settings (write-if-absent) and the rules.d.ts ignore', async () => {
+    await run(FULL, { cwd, exec, yes });
 
     const config = JSON.parse(read('.archgate/config.json'));
     expect(config.domains).toEqual({});
@@ -211,25 +246,23 @@ describe('run — archgate headless direct-write (--yes)', () => {
     expect(settings.permissions.allow).toContain('Skill(archgate:adr-author)');
 
     expect(read('.gitignore')).toContain('.archgate/rules.d.ts');
-    // Headless never invokes `archgate init`.
-    expect(calls.some((c) => c.args.includes('init'))).toBe(false);
   });
 
-  it('seeds an empty adrs/ dir (valid workspace) without an example ADR', async () => {
-    await run(FULL, { cwd, exec, yes: true });
-    // The adrs/ dir must exist — `archgate check` keys off it, not config.json —
-    // but starts clean: a .gitkeep, no ADR content (US-9, US-16).
-    expect(has('.archgate/adrs/.gitkeep')).toBe(true);
-    expect(readdirSync(join(cwd, '.archgate/adrs')).some((f) => f.endsWith('.md'))).toBe(false);
+  it('retires the empty adrs/.gitkeep — the dir now holds real, governed ADRs', async () => {
+    await run(FULL, { cwd, exec, yes });
+    expect(has('.archgate/adrs/.gitkeep')).toBe(false);
+    expect(readdirSync(join(cwd, '.archgate/adrs')).some((f) => f.endsWith('.md'))).toBe(true);
   });
 
   it('omits the parts archgate regenerates or the developer authors', async () => {
-    await run(FULL, { cwd, exec, yes: true });
+    await run(FULL, { cwd, exec, yes });
     expect(has('.archgate/rules.d.ts')).toBe(false); // @generated by `archgate check`
     expect(has('.archgate/lint')).toBe(false); // no doc-only placeholder dir
   });
+});
 
-  it('writes no .archgate/ or Claude settings when archgate is not selected', async () => {
+describe('run — archgate not selected', () => {
+  it('writes no .archgate/ or Claude settings', async () => {
     await run({ integrations: ['vitest'], vitest: {} }, { cwd, exec, yes: true });
     expect(has('.archgate')).toBe(false);
     expect(has('.claude/settings.local.json')).toBe(false);
