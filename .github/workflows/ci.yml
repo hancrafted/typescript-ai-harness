@@ -33,7 +33,7 @@ jobs:
         with:
           # Full history so archgate's base-branch comparison has the refs it needs.
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # Node 24 only: the sole supported range (package.json engines `>=24`),
           # and the version publish.yml ships on. Dropping the 22/24 matrix roughly
