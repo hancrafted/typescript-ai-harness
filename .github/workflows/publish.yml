@@ -1,10 +1,12 @@
 name: Publish
 
-# Release pipeline (ADR-0009, amended 2026-07-21): a v* tag re-verifies and
-# rebuilds, then publishes to npm via OIDC **trusted publishing** — no token.
-# Releases are cut manually — `npm version <bump>` then `git push --follow-tags`
-# — so publishing is a deliberate, auditable act. A failing verify or build
-# aborts the job before anything reaches npm.
+# Release pipeline (ADR-0009, amended 2026-07-23): a v* tag re-runs the full merge
+# gate — `npm run verify` (now including knip) + a Trivy scan — then rebuilds and
+# publishes to npm via OIDC **trusted publishing** (no token). Re-running verify +
+# Trivy makes a release a strict superset of the merge gate, so a tag can never
+# ship code that skipped those checks (US-10). Releases are cut manually — `npm
+# version <bump>` then `git push --follow-tags` — so publishing is a deliberate,
+# auditable act. A failing verify, scan, or build aborts before anything reaches npm.
 on:
   push:
     tags:
@@ -12,7 +14,7 @@ on:
 
 jobs:
   publish:
-    name: verify + build + publish to npm
+    name: verify + scan + build + publish to npm
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -40,7 +42,23 @@ jobs:
           sed -i '/_authToken/d' "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
           echo "OIDC request URL present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm ci
+      # Re-run the merge gate: verify (prettier, eslint, tsc, vitest, knip,
+      # archgate) then the same HIGH/CRITICAL Trivy gate as security.yml, so a
+      # release cannot ship code that skipped either (US-10).
       - run: npm run verify
+      - name: Trivy gate (HIGH / CRITICAL — fail)
+        uses: aquasecurity/trivy-action@v0.36.0
+        # Scan dev deps: the published package ships zero runtime deps, so every
+        # entry in package-lock.json is a devDependency Trivy would otherwise
+        # suppress (mirrors security.yml).
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
       - run: npm run build
       # Trusted publishing: the npm CLI detects the GitHub Actions OIDC environment
       # and authenticates with no token; provenance is attached automatically.

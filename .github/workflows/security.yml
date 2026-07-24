@@ -1,0 +1,59 @@
+name: Security
+
+# Security pipeline (ADR-0009, amended 2026-07-23). A Trivy scan for vulnerable
+# dependencies, leaked secrets, and misconfigurations. Kept OFF the WIP-push path
+# so the inner loop stays fast: it runs at the PR gate and on a nightly schedule.
+# The nightly run surfaces a newly-disclosed CVE in an unchanged dependency even
+# when nobody pushes (US-7).
+on:
+  pull_request:
+  schedule:
+    # 03:00 UTC daily — scans the default branch (main) for freshly-disclosed CVEs.
+    - cron: '0 3 * * *'
+
+# Least privilege: the scan only reads the tree.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No `npm ci`: Trivy reads package-lock.json directly, so the scan adds no
+      # install tax and runs in parallel with ci.yml's verify job (US-20).
+      #
+      # TRIVY_INCLUDE_DEV_DEPS: this package bundles its deps and ships ZERO
+      # runtime dependencies (tsup inlines @clack/prompts), so every entry in
+      # package-lock.json is a devDependency — which Trivy suppresses by default,
+      # making the vuln scan a no-op here. Scan them (a vulnerable build tool is
+      # still a real supply-chain risk). Set per step, so the gate block below
+      # stays identical to publish.yml's. trivy-action is composite, so step env
+      # reaches the trivy CLI it invokes.
+      - name: Trivy report (all severities — warn only)
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          # Report everything for visibility, but never block on it.
+          exit-code: '0'
+      - name: Trivy gate (HIGH / CRITICAL — fail)
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_INCLUDE_DEV_DEPS: 'true'
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          # Block the merge / release only on real risk (US-6).
+          exit-code: '1'
