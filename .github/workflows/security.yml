@@ -24,7 +24,7 @@ jobs:
     name: trivy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # No `npm ci`: Trivy reads package-lock.json directly, so the scan adds no
       # install tax and runs in parallel with ci.yml's verify job (US-20).
       #
