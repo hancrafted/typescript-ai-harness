@@ -106,6 +106,20 @@ _Avoid_: manifest (retired), harness config (that is the target-facing runtime f
 The committed, derived copy of the Core governance bundle that travels with the CLI, captured from the canonical `.archgate/adrs/` (+ supporting) files by the release-time capture step. The CLI writes it into a Target's `.archgate/**` with overwrite (Tool-owned) and mints the `.claude/rules/` symlinks. Never hand-edited — the capture is scripted and CI-gated, so it cannot drift from the canonical source. On self-apply the asset equals its source, so writing is a byte-identical no-op — the dogfood proof that the update mechanism works.
 _Avoid_: template (reserved for the string-template model), snapshot (reserved for archgate's config/settings capture, ADR-0005)
 
+## CI/CD
+
+**Stage**:
+A trigger-tier at which CI checks run: **push** (to `main`), **PR**, **release** (a `v*` tag), or **nightly** (scheduled). Which checks run at which stage is set by concern — deterministic checks on push/PR/release, the security scan on PR/release/nightly. Owned by the three workflows (ADR-0009): `ci.yml`, `security.yml`, `publish.yml`.
+_Avoid_: phase, environment, gate (a gate is what blocks; a Stage is when it runs)
+
+**Deterministic check**:
+A verify-tier check whose result depends only on the committed source — `prettier`, `eslint`, `tsc`, `vitest`, `knip`, `archgate`. Same input, same result, so it runs on every push, PR, and release, each as its own named `ci.yml` step (and re-run by `publish.yml`). Contrast with a Security scan, whose result varies with the outside world.
+_Avoid_: unit test (narrower), lint (only part of the set), verify step (the CI framing is "check")
+
+**Security scan**:
+A time-varying check whose verdict depends on the outside world — a CVE feed, secret patterns — as much as on the source: **Trivy** (vulnerable deps, leaked secrets, misconfig). The same commit can pass today and fail tomorrow, so it concentrates on PRs, at release, and on a nightly schedule rather than every push, and it fails only on HIGH/CRITICAL. Owned by `security.yml` and re-run by `publish.yml` at release. Contrast with a Deterministic check.
+_Avoid_: audit, vulnerability check (Trivy also scans secrets + misconfig), lint
+
 ## Evals
 
 **Eval harness layer**:
