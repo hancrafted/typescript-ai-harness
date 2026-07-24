@@ -228,7 +228,10 @@ describe.each([
     expect(lstatSync(link).isSymbolicLink()).toBe(true); // a copy would invert archgate's rule
     expect(readlinkSync(link)).toBe('../../.archgate/adrs/GEN-001-adr.md'); // relative, stored verbatim
     expect(readFileSync(link, 'utf8')).toBe(read('.archgate/adrs/GEN-001-adr.md')); // resolves through
-    for (const id of CORE) expect(has(`.claude/rules/${id}.md`)).toBe(true);
+    // Lowercased basename, matching how the symlink is created and what archgate's
+    // adr-claude-rules-symlink rule expects — uppercase here only passed on a
+    // case-insensitive macOS FS and broke on case-sensitive Linux CI.
+    for (const id of CORE) expect(has(`.claude/rules/${id.toLowerCase()}.md`)).toBe(true);
   });
 
   it('seeds config.json + Claude settings (write-if-absent) and the rules.d.ts ignore', async () => {
