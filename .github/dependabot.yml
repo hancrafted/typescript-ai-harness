@@ -1,0 +1,10 @@
+# Keeps GitHub Actions pinned to readable major tags (@v4, @v0.36.0) current:
+# Dependabot opens a PR when a newer release lands, so a pin never silently rots
+# and every bump is reviewed (ADR-0009, US-12). The npm ecosystem is deliberately
+# left out for now (optional per #53) to keep dependency-bump churn low.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

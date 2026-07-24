@@ -24,7 +24,7 @@ harness — it updates in place without clobbering your project metadata.
 
 ## Requirements
 
-- **Node.js** 20+ and **npm** (the tool assumes npm for installs and hooks).
+- **Node.js** 24+ and **npm** (the tool assumes npm for installs and hooks).
 - **git** — Husky wires git hooks, so the tool runs inside a git repository.
 
 No global install and no build toolchain: `npx` pulls a single bundled file with zero
@@ -172,9 +172,10 @@ continuously exercised against a real project (itself).
 
 ```bash
 npm install        # install the harness devDependencies
-npm run verify     # archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run
+npm run verify     # prettier --check . && eslint . && tsc --noEmit && vitest run && knip && archgate check
 npm test           # vitest run
 npm run format     # prettier --write .
+npm run knip       # unused files / deps / exports (repo-local hygiene gate, not shipped to targets)
 npm run build      # bundle src/cli.ts -> dist/cli.mjs (the published bin)
 npm run smoke      # boot-smoke the built bundle (--dry-run --yes); run after build
 ```
@@ -222,11 +223,31 @@ that exercises the published artifact rather than source. It runs after `npm run
 npm run build && npm run smoke
 ```
 
+### CI/CD pipeline
+
+Three GitHub Actions workflows split CI **one concern per file** (ADR-0009), each with its
+own trigger and its own least-privilege token:
+
+| Workflow | Concern | Runs on | What it does |
+| --- | --- | --- | --- |
+| **`ci.yml`** | Correctness | push to `main` · every PR | `verify` as one **named step per check** (in cheapest-/likeliest-to-fail-first order — `prettier → eslint → tsc → vitest → knip → archgate`), then `build` + `boot-smoke` of the bundle. Node 24 only. |
+| **`security.yml`** | Security | every PR · **weekly** (Mon 03:00 UTC) | A **Trivy** filesystem scan — vulnerable deps, leaked secrets, misconfig. Reports all severities, **fails on HIGH/CRITICAL**. No `npm ci`, so it runs in parallel with `verify`. |
+| **`publish.yml`** | Release | `v*` git tag | Re-runs `verify` **and** the Trivy gate, then `build` + `npm publish` with provenance. A release is a strict superset of the merge gate. |
+
+The organising rule: **deterministic checks** (`prettier`, `eslint`, `tsc`, `vitest`, `knip`,
+`archgate` — same source in, same result out) run on push, PR, and release; the **time-varying
+security scan** (its verdict depends on an external CVE feed) concentrates on PRs, at release,
+and on a weekly schedule — never on a work-in-progress push, so the inner loop stays fast. The
+weekly run still catches a newly-disclosed CVE in an otherwise-unchanged dependency when nobody
+is pushing. Feature branches with no open PR get no CI by design — open the PR to get the gate.
+
+> The build/publish plumbing is repo-local release tooling and is **not** shipped into target
+> projects (ADR-0003). Targets receive the harness, not these workflows.
+
 ### Releasing
 
-Releases are cut manually. CI (`ci.yml`) verifies, builds, and boot-smokes every push and
-PR; a `v*` tag triggers `publish.yml`, which re-verifies, rebuilds, and publishes to npm
-with provenance. To release:
+Releases are cut manually — bump, tag, push. The tag is what triggers `publish.yml` (above). To
+release:
 
 ```bash
 npm version <patch|minor|major>   # bumps package.json and creates the vX.Y.Z tag

@@ -1,8 +1,8 @@
 ---
 type: design-adr
 title: "CI/CD and npm release"
-description: "Two GitHub Actions workflows — ci.yml on every push/PR and publish.yml on v* tags — build, verify, and publish the bundled dist to npm."
-status: amended 2026-07-21 — token auth replaced by OIDC trusted publishing
+description: "Three GitHub Actions workflows by concern — ci.yml (verify + knip), security.yml (Trivy), publish.yml (release) — separating correctness, security, and publishing to npm."
+status: amended 2026-07-23 — split into three workflows (ci / security / publish); add knip + Trivy; Node 24 only; least-privilege tokens
 ---
 
 # CI/CD pipeline and npm release process
@@ -39,3 +39,27 @@ The "authenticates directly, provenance automatic" description above is correct 
 - **A rejected trusted-publisher match surfaces as a misleading `E404`/`ENEEDAUTH`, not a clear diagnostic** ([npm/cli#9088](https://github.com/npm/cli/issues/9088)). Once the workflow is in the shape above (verified by an `id-token` env echo + npm ≥ 11.5.1), a remaining auth error is almost always the **npmjs.com trusted-publisher config**, not the workflow: the org/user, repo, workflow filename (`publish.yml`, no path, no stray space), and environment (must be blank) must match the OIDC claim exactly. Re-trigger after fixing the config with `gh run rerun <id>` — the OIDC token is minted fresh per run, so no new tag is needed.
 
 Net: the token → OIDC decision stands and the security win is real, but the pipeline needs the `_authToken` strip step and the trusted publisher must be **verified as actually registered** (not merely assumed) before the first tag.
+
+## Update — 2026-07-23: split into three workflows, add knip + Trivy
+
+The single `ci.yml` `verify` job above did everything in one place: a red run hid behind one opaque `npm run verify` step, it ran the full suite twice (Node 22 + 24) for no benefit, there was no security scanning, and it used the default broad token. This amendment splits CI into **three workflows, one concern each**, and adds two checks. The two-workflow shape (one CI, one publish) is superseded; the OIDC publish mechanics above are unchanged.
+
+- **`ci.yml` — correctness.** One `verify` job on **Node 24 only** (the matrix is dropped: 24 is the sole supported range — see `engines` below — and the version publish.yml ships on, so testing 22 paid to cover a version nobody runs). Every check is its **own named step** in cheapest / likeliest-to-fail-first order — `prettier → eslint → tsc → vitest → knip → archgate` — so a red run names the failing check without opening logs; build + boot-smoke of the bundle stay at the end, after source is validated. Triggers are **`push: [main]` + `pull_request`** (not bare `push`), so a feature branch with an open PR runs once, not twice. `fetch-depth: 0` (archgate base compare), the npm cache, and `concurrency` cancel-in-progress are retained.
+- **`security.yml` — security.** A **Trivy** filesystem scan (vulnerable deps, leaked secrets, misconfig) as its own job that needs **no `npm ci`** — it reads `package-lock.json` directly, so it adds no install tax and runs in parallel with `verify`. It runs on `pull_request` and a **weekly `schedule`**, deliberately **off the WIP-push path** so the inner loop stays fast; the weekly run surfaces a newly-disclosed CVE in an unchanged dependency even when nobody pushes. It **fails on HIGH/CRITICAL** and warns on the rest (a report-only pass at all severities plus a gate pass), so the gate blocks real risk without drowning it in noise.
+- **`publish.yml` — release.** Auth/trigger unchanged, but a `v*` tag now **re-runs `verify` (including knip) + the Trivy gate before build + publish**, making a release a strict superset of the merge gate — a tag can never ship code that skipped those checks.
+
+The organising rule: **deterministic checks** (source-only, same-input-same-result) run on push/PR/release; the **time-varying security scan** (depends on an external CVE feed) concentrates at the PR gate, release, and a weekly schedule, never on a WIP push (see `CONTEXT.md` → CI/CD).
+
+### Considered options (this amendment)
+
+- **Three workflows by concern (chosen)** vs one workflow with multiple jobs. Separate files give each concern its own trigger matrix, its own least-privilege token, and an independently-required status check on the PR; the small cost is three headers instead of one.
+- **knip as a repo verify gate (chosen)** vs no dead-code check vs governance-mandated knip. knip flags unused files/deps/exports as a deterministic verify-tier check; its config treats `.archgate/**/*.rules.ts` as entry points so governance rule files (loaded by the archgate binary, not imported) are not falsely flagged (relates to #35). Whether *governance mandates* knip over `.archgate/**` is out of scope here — this is only a repo gate.
+- **`@v4` major-tag pins + Dependabot (chosen)** vs SHA-pinning. Readable tags kept legible; a new `.github/dependabot.yml` (github-actions ecosystem) opens a PR when a newer release lands, so a pin cannot silently rot. SHA-pinning (stronger supply-chain immutability) is deferred.
+- **Least privilege (chosen):** each workflow declares `permissions: contents: read` at the top; `id-token: write` stays only in `publish.yml` where OIDC needs it.
+
+### Consequences (this amendment)
+
+- **`engines` narrows to `">=24"`** so the advertised support range matches what CI actually tests (was `>=20`). `npm run knip` is runnable locally to reproduce hygiene failures before pushing.
+- **A feature branch with no open PR now gets no CI** — accepted under a PR-based flow; open the PR to get the gate.
+- The **capture-freshness guard** (the ADR-0010 clean-diff guard that fails when a stale Core bundle asset lags its canonical source) is kept as its own named step in `verify`, slotting between `archgate` and `build`. It depends on the ADR-0010 capture mechanism (`harness.config.json` + capture script, #47/#50); until that lands, `ci.yml` carries a documented placeholder at the insertion point rather than a step that would run a script that does not yet exist.
+- The deferred Docker e2e artifact test and the merge-queue (`merge_group`) path remain out of scope and scheduled separately.

@@ -1,27 +1,33 @@
 name: CI
 
-# Fast pipeline (ADR-0009): verify → build → boot-smoke the bundle on every push
-# and PR. It builds and boots the published artifact but never publishes — that
-# is publish.yml's job, gated on a v* tag.
+# Correctness pipeline (ADR-0009, amended 2026-07-23). One `verify` job that runs
+# every deterministic check as its own named step — a red run names the failing
+# check without opening logs — then builds and boot-smokes the published artifact.
+# Security scanning lives in security.yml; publishing lives in publish.yml.
+#
+# Triggers: pushes to `main` and every pull request. A feature branch with an open
+# PR therefore runs once (on the PR), not twice — a branch with no PR gets no CI,
+# which is acceptable under a PR-based flow.
 on:
   push:
+    branches: [main]
   pull_request:
 
+# Least privilege: read-only token instead of the default broad one.
+permissions:
+  contents: read
+
 # A newer push to the same ref cancels the in-flight run, so feedback stays fast
-# and cheap (US-25). Push and PR runs live in separate groups (distinct refs) and
-# do not cancel each other.
+# and cheap. Push and PR runs live in separate groups (distinct refs) and do not
+# cancel each other.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
-    name: verify + build + smoke (Node ${{ matrix.node-version }})
+    name: verify + build + smoke
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ['22', '24']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,14 +35,45 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          # Node 24 only: the sole supported range (package.json engines `>=24`),
+          # and the version publish.yml ships on. Dropping the 22/24 matrix roughly
+          # halves the run for no lost coverage.
+          node-version: '24'
           cache: npm
       # Clean, lockfile-pinned install (ADR-0009).
       - run: npm ci
-      # archgate check + eslint + prettier + tsc + vitest (ADR-0007).
-      - run: npm run verify
+      # Deterministic checks, cheapest / likeliest-to-fail first so a common
+      # failure surfaces soonest. Each is its own named step (US-1). This mirrors
+      # the `npm run verify` chain, split for legibility.
+      - name: prettier
+        run: npm run format:check
+      - name: eslint
+        run: npx eslint .
+      - name: tsc
+        run: npx tsc --noEmit
+      - name: vitest
+        run: npm test
+      # knip: unused files / deps / exports. knip.json marks the governance rule
+      # files (`.archgate/adrs/*.rules.ts`) as entry points — the archgate binary
+      # loads them dynamically, so knip cannot see the reference and would else
+      # falsely flag them; their helpers are reached via those entries and the
+      # rule tests (relates to #35).
+      - name: knip
+        run: npm run knip
+      # archgate last among the source checks: it is the slowest and the least
+      # likely to fail on a WIP push.
+      - name: archgate
+        run: npx archgate check
+      # NOTE (capture-freshness guard, US-16 / ADR-0010): once the Core-bundle
+      # capture mechanism lands (harness.config.json + capture script, #47/#50),
+      # its clean-diff guard slots in HERE as its own named step — re-run the
+      # capture and `git diff --exit-code` so a stale Bundle asset fails legibly,
+      # after source is validated but before build. It is intentionally absent
+      # until that mechanism exists, so CI does not run a script that is not here.
       # Build the single-file bundle, then boot-smoke the *published artifact* —
       # catches a bundling break (bad entry, dropped import, broken shebang) that
       # source-level tests cannot (ADR-0009).
-      - run: npm run build
-      - run: npm run smoke
+      - name: build
+        run: npm run build
+      - name: boot-smoke
+        run: npm run smoke
