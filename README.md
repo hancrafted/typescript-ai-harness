@@ -228,7 +228,7 @@ npm run build && npm run smoke
 Releases are cut manually. Three workflows split CI by concern (ADR-0009): `ci.yml`
 verifies (each check its own named step, Node 24), builds, and boot-smokes on pushes to
 `main` and every PR; `security.yml` runs a Trivy scan (vulnerable deps, leaked secrets,
-misconfig) on PRs and nightly; a `v*` tag triggers `publish.yml`, which re-runs verify +
+misconfig) on PRs and weekly; a `v*` tag triggers `publish.yml`, which re-runs verify +
 Trivy, rebuilds, and publishes to npm with provenance. To release:
 
 ```bash

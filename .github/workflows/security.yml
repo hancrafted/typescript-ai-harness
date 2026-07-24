@@ -2,14 +2,14 @@ name: Security
 
 # Security pipeline (ADR-0009, amended 2026-07-23). A Trivy scan for vulnerable
 # dependencies, leaked secrets, and misconfigurations. Kept OFF the WIP-push path
-# so the inner loop stays fast: it runs at the PR gate and on a nightly schedule.
-# The nightly run surfaces a newly-disclosed CVE in an unchanged dependency even
+# so the inner loop stays fast: it runs at the PR gate and on a weekly schedule.
+# The weekly run surfaces a newly-disclosed CVE in an unchanged dependency even
 # when nobody pushes (US-7).
 on:
   pull_request:
   schedule:
-    # 03:00 UTC daily — scans the default branch (main) for freshly-disclosed CVEs.
-    - cron: '0 3 * * *'
+    # 03:00 UTC every Monday — scans the default branch (main) for freshly-disclosed CVEs.
+    - cron: '0 3 * * 1'
 
 # Least privilege: the scan only reads the tree.
 permissions:

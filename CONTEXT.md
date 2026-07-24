@@ -109,7 +109,7 @@ _Avoid_: template (reserved for the string-template model), snapshot (reserved f
 ## CI/CD
 
 **Stage**:
-A trigger-tier at which CI checks run: **push** (to `main`), **PR**, **release** (a `v*` tag), or **nightly** (scheduled). Which checks run at which stage is set by concern — deterministic checks on push/PR/release, the security scan on PR/release/nightly. Owned by the three workflows (ADR-0009): `ci.yml`, `security.yml`, `publish.yml`.
+A trigger-tier at which CI checks run: **push** (to `main`), **PR**, **release** (a `v*` tag), or **scheduled** (weekly). Which checks run at which stage is set by concern — deterministic checks on push/PR/release, the security scan on PR/release/scheduled. Owned by the three workflows (ADR-0009): `ci.yml`, `security.yml`, `publish.yml`.
 _Avoid_: phase, environment, gate (a gate is what blocks; a Stage is when it runs)
 
 **Deterministic check**:
@@ -117,7 +117,7 @@ A verify-tier check whose result depends only on the committed source — `prett
 _Avoid_: unit test (narrower), lint (only part of the set), verify step (the CI framing is "check")
 
 **Security scan**:
-A time-varying check whose verdict depends on the outside world — a CVE feed, secret patterns — as much as on the source: **Trivy** (vulnerable deps, leaked secrets, misconfig). The same commit can pass today and fail tomorrow, so it concentrates on PRs, at release, and on a nightly schedule rather than every push, and it fails only on HIGH/CRITICAL. Owned by `security.yml` and re-run by `publish.yml` at release. Contrast with a Deterministic check.
+A time-varying check whose verdict depends on the outside world — a CVE feed, secret patterns — as much as on the source: **Trivy** (vulnerable deps, leaked secrets, misconfig). The same commit can pass today and fail tomorrow, so it concentrates on PRs, at release, and on a weekly schedule rather than every push, and it fails only on HIGH/CRITICAL. Owned by `security.yml` and re-run by `publish.yml` at release. Contrast with a Deterministic check.
 _Avoid_: audit, vulnerability check (Trivy also scans secrets + misconfig), lint
 
 ## Evals
