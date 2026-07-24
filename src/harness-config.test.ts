@@ -1,6 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ADR_CORE, ARCHGATE_VERSION, harnessConfig, parseHarnessConfig, supportingFiles } from './harness-config';
+import {
+  ADR_CORE,
+  ARCHGATE_VERSION,
+  HARNESS_VERSION,
+  harnessConfig,
+  parseHarnessConfig,
+  supportingFiles,
+} from './harness-config';
 
 // The build config is validated at the parse seam, so parseHarnessConfig is the
 // unit under test; the baked exports and the publish-surface invariant are
@@ -73,6 +80,13 @@ describe('harness.config.json — the baked build config', () => {
 
   it('pins the archgate version, unchanged from the retired template.ts constant', () => {
     expect(ARCHGATE_VERSION).toBe('^0.50.0');
+  });
+
+  it('exposes the harness release version from package.json (the seed stamp source)', () => {
+    // The seed stamps HARNESS_VERSION into .typescript-ai-harness.json; it must
+    // track package.json (npm's source of truth), never a hand-copied literal.
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
+    expect(HARNESS_VERSION).toBe(pkg.version);
   });
 
   it('exposes a single validated object for consumers', () => {

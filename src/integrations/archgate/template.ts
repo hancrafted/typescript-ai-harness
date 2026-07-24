@@ -1,4 +1,4 @@
-import { ARCHGATE_VERSION } from '../../harness-config';
+import { ARCHGATE_VERSION, HARNESS_VERSION } from '../../harness-config';
 
 /**
  * The `archgate init --editor claude` snapshot, captured against the pinned
@@ -49,6 +49,58 @@ export const claudeSettingsLocal = (): string =>
     null,
     2,
   )}\n`;
+
+/**
+ * The CLI's own copy of GEN-003's built-in default `markdown.frontmatter`
+ * block — the four root-or-specific entries the Frontmatter Contract applies
+ * when no config file is present. Seeding writes exactly this, so the seed is a
+ * **behaviour no-op**: it materialises the policy GEN-003 already enforces by
+ * default (ADR-0010 §6). GEN-003's rules.ts hardcodes the same block and cannot
+ * import it (archgate rules share no runtime code), so this is a deliberate
+ * second copy, kept honest by a shared-fixture test: both this copy and
+ * GEN-003's are pinned to `DEFAULT_FRONTMATTER` in `harness-config-fixtures.ts`,
+ * so a drift in either fails. Carries NONE of this repo's project-specific
+ * entries (`docs/adr`, `docs/agents`, `.claude/agents`, `CONTEXT.md` — the #14
+ * disambiguation, kept out of core).
+ */
+export const SEED_FRONTMATTER = {
+  unmatched: 'exempt',
+  pathRules: [
+    { include: ['.archgate/adrs/*.md'], rule: { allowedTypes: ['adr'], label: 'title' } },
+    { include: ['README.md'], rule: { allowedTypes: ['docs'], label: 'title' } },
+    { include: ['AGENTS.md'], rule: { allowedTypes: ['agents-md'], label: 'title' } },
+    { include: ['CLAUDE.md'], rule: { allowedTypes: ['claude-md'], label: 'title' } },
+  ],
+};
+
+/**
+ * Seeded `.typescript-ai-harness.json` (GEN-002 §1): the config envelope
+ * stamping the harness release `version` over GEN-003's default frontmatter
+ * block. A **Seeded** config file — written once, never patched on re-run; an
+ * upgrade is the explicit migrate step (#11), never a silent rewrite. Two-space
+ * JSON with a trailing newline so the file passes prettier on self-apply.
+ */
+export const harnessConfigSeed = (): string =>
+  `${JSON.stringify({ version: HARNESS_VERSION, markdown: { frontmatter: SEED_FRONTMATTER } }, null, 2)}\n`;
+
+/**
+ * Post-run advisory (ADR-0010 §6). The seed stamps the harness release
+ * (`HARNESS_VERSION`), but GEN-002's `config-version` rule compares that stamp
+ * against the **Target's own** `package.json` version. In a foreign Target the
+ * two differ, so archgate will not enforce the freshly-seeded config until the
+ * migrate step (#11) restamps it — surface that up-front so it does not read as
+ * a governance failure. Returns null when the versions match (this repo
+ * dogfoods clean — the harness *is* the package) or the Target declares no
+ * version to compare against (GEN-002 §1.4.3 skips the check, never guesses).
+ */
+export function configVersionNote(stamped: string, targetVersion: string | null): string | null {
+  if (targetVersion === null || targetVersion === stamped) return null;
+  return (
+    `.typescript-ai-harness.json was stamped version ${stamped} (this harness release), but this ` +
+    `project's package.json is ${targetVersion}. archgate's config-version rule requires they match, ` +
+    `so it will not enforce the seeded config until the migrate step restamps it (#11).`
+  );
+}
 
 /**
  * Append-only `.gitignore` entry for archgate's generated runtime. `rules.d.ts`

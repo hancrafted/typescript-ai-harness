@@ -75,7 +75,7 @@ const VALID_LABELS = ['name', 'title'];
 // payload, pins the title label, and runs at the error tier, so installing the
 // contract never sweeps node_modules or vendored markdown. Keys are unquoted so
 // GEN-001's ruleKeysOf scan reads no phantom rule here.
-const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG = {
   unmatched: 'exempt',
   pathRules: [
     { include: ['.archgate/adrs/*.md'], rule: { allowedTypes: ['adr'], label: 'title' } },

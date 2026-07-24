@@ -1,4 +1,16 @@
 import rawHarnessConfig from '../harness.config.json';
+import { version } from '../package.json';
+
+/**
+ * The harness's own release version, read from its `package.json` and baked
+ * into the bundle at build (tsup inlines JSON). This is the value the CLI
+ * stamps into a seeded `.typescript-ai-harness.json` — GEN-002 §1.4 requires
+ * the config's `version` to equal the installed harness release, so the stamp
+ * is the harness release, never the Target's own version. `package.json` is the
+ * single source of truth for it (npm owns that field); `harness.config.json`
+ * deliberately does not duplicate it.
+ */
+export const HARNESS_VERSION: string = version;
 
 /**
  * The **Harness build config** (ADR-0010 §2): root, Tool-owned metadata naming

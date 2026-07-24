@@ -15,6 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_FRONTMATTER,
   DEPTH_VIOLATION_CONFIG,
   MOCK_HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
@@ -27,7 +28,7 @@ import {
   VERSION_MISMATCH_CONFIG,
   VERSION_MISSING_CONFIG,
 } from '../harness-config-fixtures';
-import ruleSet from './GEN-003-frontmatter.rules';
+import ruleSet, { DEFAULT_CONFIG } from './GEN-003-frontmatter.rules';
 
 interface Reported {
   message: string;
@@ -634,6 +635,15 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
 });
 
 describe('frontmatter-floor built-in default (no harness config)', () => {
+  // Keep-honest: this rules file hardcodes DEFAULT_CONFIG and cannot import
+  // (archgate rules share no runtime code), so it is pinned to the shared
+  // DEFAULT_FRONTMATTER fixture that the CLI seed is pinned to too — if this
+  // default drifts, both this test and the CLI's keep-honest test fail, forcing
+  // the seed to be updated in lockstep so seeding stays a behaviour no-op (#49).
+  it('applies exactly the shared DEFAULT_FRONTMATTER fixture', () => {
+    expect(DEFAULT_CONFIG).toEqual(DEFAULT_FRONTMATTER);
+  });
+
   it('governs .archgate/adrs/*.md by the default when the config is absent', async () => {
     const files = { '.archgate/adrs/GEN-009-x.md': md('type: adr\ntitle: "X"\ndescription: "Why."') };
     const { ctx, violations } = makeCtx(files); // no config → DEFAULT applies
