@@ -24,7 +24,7 @@ harness — it updates in place without clobbering your project metadata.
 
 ## Requirements
 
-- **Node.js** 20+ and **npm** (the tool assumes npm for installs and hooks).
+- **Node.js** 24+ and **npm** (the tool assumes npm for installs and hooks).
 - **git** — Husky wires git hooks, so the tool runs inside a git repository.
 
 No global install and no build toolchain: `npx` pulls a single bundled file with zero
@@ -172,9 +172,10 @@ continuously exercised against a real project (itself).
 
 ```bash
 npm install        # install the harness devDependencies
-npm run verify     # archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run
+npm run verify     # prettier --check . && eslint . && tsc --noEmit && vitest run && knip && archgate check
 npm test           # vitest run
 npm run format     # prettier --write .
+npm run knip       # unused files / deps / exports (repo-local hygiene gate, not shipped to targets)
 npm run build      # bundle src/cli.ts -> dist/cli.mjs (the published bin)
 npm run smoke      # boot-smoke the built bundle (--dry-run --yes); run after build
 ```
@@ -224,9 +225,11 @@ npm run build && npm run smoke
 
 ### Releasing
 
-Releases are cut manually. CI (`ci.yml`) verifies, builds, and boot-smokes every push and
-PR; a `v*` tag triggers `publish.yml`, which re-verifies, rebuilds, and publishes to npm
-with provenance. To release:
+Releases are cut manually. Three workflows split CI by concern (ADR-0009): `ci.yml`
+verifies (each check its own named step, Node 24), builds, and boot-smokes on pushes to
+`main` and every PR; `security.yml` runs a Trivy scan (vulnerable deps, leaked secrets,
+misconfig) on PRs and nightly; a `v*` tag triggers `publish.yml`, which re-runs verify +
+Trivy, rebuilds, and publishes to npm with provenance. To release:
 
 ```bash
 npm version <patch|minor|major>   # bumps package.json and creates the vX.Y.Z tag
