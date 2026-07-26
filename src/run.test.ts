@@ -49,11 +49,13 @@ const npmInstall = (): { command: string; args: string[] } | undefined =>
   calls.find((c) => c.command === 'npm' && c.args[0] === 'install');
 
 const FULL: Answers = {
-  integrations: ['archgate', 'eslint', 'prettier', 'vitest', 'husky'],
+  integrations: ['archgate', 'eslint', 'prettier', 'vitest', 'knip', 'husky', 'trivy'],
   eslint: { rules: ['complexity', 'max-lines-per-function', 'max-params', 'max-depth', 'max-lines'] },
   prettier: { importSort: 'organize-imports' },
   vitest: {},
   husky: { hooks: ['pre-commit', 'pre-push'] },
+  knip: {},
+  trivy: {},
 };
 
 describe('run — materialized files', () => {
@@ -155,6 +157,43 @@ describe('run — cross-Integration composition', () => {
     // Imports must be in organize-imports order so a fresh target passes
     // prettier --check before its first format: @eslint/js < eslint-config-prettier < typescript-eslint.
     expect(config.indexOf("'eslint-config-prettier'")).toBeLessThan(config.indexOf("'typescript-eslint'"));
+  });
+});
+
+describe('run — knip integration', () => {
+  it('installs knip, writes knip.json, adds the script, and joins the verify chain', async () => {
+    await run(FULL, { cwd, exec });
+    expect(npmInstall()?.args).toContain('knip');
+    expect(readPkg().scripts.knip).toBe('knip');
+    // Composed by husky as a pre-push gate (not verify:commit, not lint-staged).
+    expect(readPkg().scripts.verify).toContain('&& knip');
+    expect(readPkg().scripts['verify:commit']).not.toContain('knip');
+    // archgate is selected in FULL, so its executed-but-unimported rules files
+    // are declared as entry points (ADR-0008 cross-Integration composition).
+    const config = JSON.parse(read('knip.json'));
+    expect(config.entry).toEqual(['.archgate/adrs/*.rules.ts']);
+    expect(config.project).toContain('.archgate/**/*.ts');
+    expect(config.ignoreExportsUsedInFile).toBe(true);
+  });
+
+  it('omits the archgate entry point when archgate is not selected', async () => {
+    await run({ integrations: ['knip'], knip: {} }, { cwd, exec });
+    const config = JSON.parse(read('knip.json'));
+    expect(config.entry).toBeUndefined();
+    expect(config.project).toEqual(['src/**/*.ts', '*.ts']);
+  });
+});
+
+describe('run — trivy integration', () => {
+  it('ships the security workflow as a CI-only scan (no dep, no script, not in verify)', async () => {
+    await run(FULL, { cwd, exec });
+    const workflow = read('.github/workflows/security.yml');
+    expect(workflow).toContain('aquasecurity/trivy-action');
+    expect(workflow).toContain('scan-type: fs');
+    // trivy is a standalone binary, not an npm package, and stays out of verify.
+    expect(npmInstall()?.args).not.toContain('trivy');
+    expect(readPkg().scripts.trivy).toBeUndefined();
+    expect(readPkg().scripts.verify).not.toContain('trivy');
   });
 });
 

@@ -15,7 +15,7 @@ The full set of Integrations installed into a target project — the external de
 _Avoid_: setup, boilerplate, toolkit
 
 **Integration**:
-A self-contained module that installs and configures one harness capability — wrapping one or more Dependencies, its config template(s), its sub-options, and its `package.json` patch. The five current Integrations: archgate, eslint, prettier, vitest, husky.
+A self-contained module that installs and configures one harness capability — wrapping one or more Dependencies, its config template(s), its sub-options, and its `package.json` patch. The seven current Integrations: archgate, eslint, prettier, vitest, knip, husky, trivy. Most wrap a Dependency; trivy is the exception — a standalone binary shipped purely as a `.github/workflows/security.yml` CI scan, with no npm Dependency.
 _Avoid_: feature, tool, plugin
 
 **Dependency**:

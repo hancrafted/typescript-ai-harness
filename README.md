@@ -10,12 +10,12 @@ An interactive CLI that installs and updates a standard dev-tooling **harness** 
 any Node/TypeScript project — so you stop re-deriving the same boilerplate by hand.
 
 One command stands up [archgate](https://www.npmjs.com/package/archgate), ESLint,
-Prettier, Vitest, and Husky, wires the `verify` scripts and git hooks, and applies
-everything in a single pass. Re-run it any time to pull the latest version of the
+Prettier, Vitest, Knip, Husky, and a Trivy CI scan, wires the `verify` scripts and git
+hooks, and applies everything in a single pass. Re-run it any time to pull the latest version of the
 harness — it updates in place without clobbering your project metadata.
 
 - **One command, no install step** — `npx @hancrafted/typescript-ai-harness` pulls one small tarball with zero runtime dependencies.
-- **Pick what you want** — a multiselect of five integrations, each with its own sub-options.
+- **Pick what you want** — a multiselect of seven integrations, each with its own sub-options.
 - **Safe to re-run** — tool-owned configs are refreshed; your `package.json` is surgically merged, never overwritten.
 - **Preview first** — `--dry-run` prints the full plan and touches nothing.
 - **Scriptable** — `--yes` skips every prompt and applies the full harness with defaults.
@@ -48,7 +48,7 @@ you don't need to run `npm init`.
 
 ### 2. Choose your integrations
 
-You'll get a multiselect with **all five preselected**. Press <kbd>Enter</kbd> to take
+You'll get a multiselect with **all seven preselected**. Press <kbd>Enter</kbd> to take
 the full harness, or use the arrow keys + <kbd>Space</kbd> to deselect any you don't want:
 
 | Integration | What it sets up |
@@ -57,7 +57,9 @@ the full harness, or use the arrow keys + <kbd>Space</kbd> to deselect any you d
 | **eslint** — linting | A generic two-tier `eslint.config.mjs` (ESM) |
 | **prettier** — formatting | An opinionated `.prettierrc.json` + `.prettierignore` |
 | **vitest** — testing | A minimal `vitest.config.ts` (v8 coverage available) |
+| **knip** — unused files, deps & exports | A `knip.json` + the `knip` script, joined into `verify` |
 | **husky** — git hooks + commit verification | Git hooks + the `verify` / `verify:commit` scripts |
+| **trivy** — vulnerability scanning (CI) | A `.github/workflows/security.yml` Trivy scan (PR + weekly) |
 
 ### 3. Answer each integration's sub-options
 
@@ -130,6 +132,7 @@ are composed from exactly those integrations:
 | `test:watch` | vitest | `vitest watch` |
 | `format` | prettier | `prettier --write .` |
 | `format:check` | prettier | `prettier --check .` |
+| `knip` | knip | `knip` |
 | `verify` | husky | full-repo checks, no mutation (see below) |
 | `verify:commit` | husky | staged autofix + full-repo correctness (see below) |
 | `prepare` | husky | `husky` (wires hooks on install) |
@@ -140,11 +143,14 @@ Clean git history is treated as project memory, so **every commit must be provab
 enforced deterministically in the hook, not by soft instruction:
 
 - **`verify`** (run on **pre-push**, and while you work) — full-repo checks, no mutation:
-  `archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run`
+  `archgate check && eslint . && prettier --check . && tsc --noEmit && vitest run && knip`
   *(only the steps for your selected integrations; `tsc --noEmit` always runs).*
 - **`verify:commit`** (run on **pre-commit**) — autofix only the **staged** files via
   lint-staged, then run **full-repo** correctness:
   `lint-staged && archgate check && tsc --noEmit && vitest run`.
+
+**trivy** stays out of `verify`: it's a standalone binary (no npm install), so it ships as a
+CI-only `.github/workflows/security.yml` scan rather than a local script.
 
 Formatting/autofix is scoped to staged files (fast); correctness always runs on the whole
 repo (so a staged change can never commit a red tree).
@@ -175,7 +181,7 @@ npm install        # install the harness devDependencies
 npm run verify     # prettier --check . && eslint . && tsc --noEmit && vitest run && knip && archgate check
 npm test           # vitest run
 npm run format     # prettier --write .
-npm run knip       # unused files / deps / exports (repo-local hygiene gate, not shipped to targets)
+npm run knip       # unused files / deps / exports (also shipped to targets as the knip integration)
 npm run build      # bundle src/cli.ts -> dist/cli.mjs (the published bin)
 npm run smoke      # boot-smoke the built bundle (--dry-run --yes); run after build
 ```
@@ -192,7 +198,7 @@ src/
   package-json.ts             # surgical, idempotent package.json merge
   summary.ts                  # renders the plan for the confirm prompt / --dry-run
   integrations/
-    registry.ts               # explicit static array of the five integrations
+    registry.ts               # explicit static array of the seven integrations
     <id>/index.ts             # each Integration (id, deps, promptSubOptions, plan)
     <id>/template.ts          # co-located config template(s)
 ```
