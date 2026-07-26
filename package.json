@@ -30,6 +30,7 @@
     "run:dry": "npx tsx bin/typescript-ai-harness.mjs --dry-run",
     "build": "tsup",
     "capture": "tsx scripts/capture.ts",
+    "self-apply": "tsx scripts/self-apply.ts",
     "smoke": "tsx scripts/smoke.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",

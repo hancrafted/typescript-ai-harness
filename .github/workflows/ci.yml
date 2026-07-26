@@ -77,6 +77,21 @@ jobs:
             git --no-pager diff -- assets
             exit 1
           fi
+      # Self-apply dogfood (ADR-0010 §4, DoD): run the CLI's own install path
+      # against this repo (the harness self-applies) and fail on any bundle diff.
+      # The bundle is Tool-owned (overwritten every run) with NO skip-self guard,
+      # so a clean `.archgate/**` + `.claude/rules/` diff proves the overwrite path
+      # reproduces the committed source byte-for-byte. Runs after the freshness
+      # guard so it reads an asset already proven equal to canonical.
+      - name: Self-apply is a clean overwrite
+        run: |
+          npm run self-apply
+          if [ -n "$(git status --porcelain -- .archgate .claude/rules)" ]; then
+            echo "::error::Self-apply drifted the Core bundle — committed .archgate/** or .claude/rules/ differs from the tool output. Run 'npm run self-apply' and commit."
+            git status --porcelain -- .archgate .claude/rules
+            git --no-pager diff -- .archgate .claude/rules
+            exit 1
+          fi
       # Build the single-file bundle, then boot-smoke the *published artifact* —
       # catches a bundling break (bad entry, dropped import, broken shebang) that
       # source-level tests cannot (ADR-0009).
