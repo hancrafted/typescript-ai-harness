@@ -11,6 +11,26 @@
  * source of truth (`package.json` `.version`) instead of hardcoding one. */
 export const MOCK_HARNESS_VERSION = '1.2.3';
 
+/** The canonical built-in default `markdown.frontmatter` block — the four
+ * root-or-specific entries GEN-003 applies when no harness config is present.
+ * The single shared source for a three-way drift tripwire: GEN-003's rules.ts
+ * hardcodes this block (it cannot import — archgate rules share no runtime
+ * code) and the CLI seeds it into a fresh Target (`SEED_FRONTMATTER`,
+ * src/integrations/archgate/template.ts), two copies that must stay identical
+ * so seeding is a behaviour no-op. Each copy is pinned to this fixture by its
+ * own test — GEN-003's rules test and the CLI's keep-honest test — so a drift
+ * in either fails loudly. Deliberately carries NONE of this repo's
+ * project-specific entries (that is the #14 disambiguation, kept out of core). */
+export const DEFAULT_FRONTMATTER: Harness.ConfigBlock<Harness.FrontmatterRule, Harness.FrontmatterSettings> = {
+  unmatched: 'exempt',
+  pathRules: [
+    { include: ['.archgate/adrs/*.md'], rule: { allowedTypes: ['adr'], label: 'title' } },
+    { include: ['README.md'], rule: { allowedTypes: ['docs'], label: 'title' } },
+    { include: ['AGENTS.md'], rule: { allowedTypes: ['agents-md'], label: 'title' } },
+    { include: ['CLAUDE.md'], rule: { allowedTypes: ['claude-md'], label: 'title' } },
+  ],
+};
+
 /** Fully valid config exercising every spine feature: settings, an
  * entry-level exclude (fall-through), an exempt entry, a multi-glob include
  * with a warning tier, and an open governed entry (no `rule` payload).

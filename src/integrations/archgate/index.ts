@@ -2,7 +2,7 @@ import { join, posix } from 'node:path';
 import { readBundleLayout, resolveBundleRoot } from '../../bundle';
 import { ADR_CORE, supportingFiles } from '../../harness-config';
 import type { Action, Integration } from '../../types';
-import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, RULES_DTS_IGNORE } from './template';
+import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, harnessConfigSeed, RULES_DTS_IGNORE } from './template';
 
 /**
  * archgate Integration — **unified deterministic direct-write** (ADR-0005 v4).
@@ -26,8 +26,12 @@ import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, RULES_DTS_IGNORE } f
  *   run to bring a brownfield Target to the current governance release.
  * - `symlink` per core ADR — a real `.claude/rules/<name>.md` back to the ADR
  *   (GEN-001 §6). Real-symlink-only; a copy would invert `adr-claude-rules-symlink`.
- * - `writeFile` (write-if-absent) — the **Seeded** `.archgate/config.json` and
+ * - `writeFile` (write-if-absent) — the **Seeded** `.typescript-ai-harness.json`
+ *   (the harness config, GEN-002/003: the default frontmatter block stamped with
+ *   this harness release), `.archgate/config.json`, and
  *   `.claude/settings.local.json`, so a developer's own edits survive a re-run.
+ *   Seeding the harness config materialises exactly the policy GEN-003 applies
+ *   by default (a behaviour no-op) but makes it visible and editable (ADR-0010 §6).
  * - `appendLines` — the `.archgate/rules.d.ts` gitignore entry (that file is
  *   `@generated` by `archgate check`, so it is ignored, never written).
  *
@@ -63,6 +67,7 @@ export const archgate: Integration = {
       { kind: 'installDeps', dev: [...this.devDependencies] },
       ...copyBundle,
       ...linkRules,
+      { kind: 'writeFile', path: '.typescript-ai-harness.json', contents: harnessConfigSeed(), overwrite: false },
       { kind: 'writeFile', path: '.archgate/config.json', contents: archgateConfig(), overwrite: false },
       { kind: 'writeFile', path: '.claude/settings.local.json', contents: claudeSettingsLocal(), overwrite: false },
       { kind: 'appendLines', path: '.gitignore', lines: RULES_DTS_IGNORE },

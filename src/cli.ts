@@ -1,7 +1,10 @@
 import { cancel, confirm, intro, isCancel, log, multiselect, note, outro, spinner } from '@clack/prompts';
 import { apply } from './apply';
 import { realExec } from './exec';
+import { HARNESS_VERSION } from './harness-config';
+import { configVersionNote } from './integrations/archgate/template';
 import { registry } from './integrations/registry';
+import { readPackageVersion } from './package-json';
 import { buildPlan } from './plan';
 import { orExit } from './prompt-util';
 import { summarize } from './summary';
@@ -55,6 +58,11 @@ async function confirmAndApply(answers: Answers, cwd: string, yes: boolean): Pro
     // v4 retired the `archgate init` shell-out that used to do it interactively),
     // so point the developer to it regardless of `--yes` (US-13).
     log.info('Run `archgate plugin install` to enable the archgate Claude plugin.');
+    // The harness config was seeded stamped with this harness release; warn when
+    // the Target's own version differs, so the known config-version mismatch
+    // (resolved by the migrate step, #11) does not read as a governance failure.
+    const versionNote = configVersionNote(HARNESS_VERSION, readPackageVersion(cwd));
+    if (versionNote) log.warn(versionNote);
   }
   outro('Done. Review the changes and commit when ready.');
 }
