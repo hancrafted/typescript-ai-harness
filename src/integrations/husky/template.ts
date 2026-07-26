@@ -12,6 +12,7 @@ export function verifyScript(selected: IntegrationId[]): string {
   if (selected.includes('prettier')) parts.push('prettier --check .');
   parts.push('tsc --noEmit');
   if (selected.includes('vitest')) parts.push('vitest run');
+  if (selected.includes('knip')) parts.push('knip');
   return parts.join(' && ');
 }
 

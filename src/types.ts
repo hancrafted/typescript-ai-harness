@@ -7,7 +7,7 @@
  * declarative unit the central `apply()` executes (ADR-0004).
  */
 
-export type IntegrationId = 'archgate' | 'eslint' | 'prettier' | 'vitest' | 'husky';
+export type IntegrationId = 'archgate' | 'eslint' | 'prettier' | 'vitest' | 'husky' | 'knip' | 'trivy';
 
 /** Injectable command runner — real spawn in prod, a spy in tests (Testing Decisions). */
 export type Exec = (command: string, args: string[], opts: { cwd: string }) => Promise<void>;
@@ -68,7 +68,14 @@ export interface HuskyChoice {
   hooks: HuskyHook[];
 }
 
-export type SubChoice = ArchgateChoice | EslintChoice | PrettierChoice | VitestChoice | HuskyChoice | undefined;
+/** knip has no sub-options in the MVP. */
+export type KnipChoice = Record<string, never>;
+
+/** trivy has no sub-options in the MVP. */
+export type TrivyChoice = Record<string, never>;
+
+export type SubChoice =
+  ArchgateChoice | EslintChoice | PrettierChoice | VitestChoice | HuskyChoice | KnipChoice | TrivyChoice | undefined;
 
 /**
  * A resolved set of user decisions. The interactive `@clack` layer produces
@@ -81,6 +88,8 @@ export interface Answers {
   prettier?: PrettierChoice;
   vitest?: VitestChoice;
   husky?: HuskyChoice;
+  knip?: KnipChoice;
+  trivy?: TrivyChoice;
 }
 
 /** A self-contained harness capability behind a uniform contract (ADR-0004). */
