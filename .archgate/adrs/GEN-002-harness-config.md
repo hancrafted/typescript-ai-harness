@@ -12,7 +12,7 @@ description: "Owns the envelope of the root harness config `.typescript-ai-harne
 
 ## Context
 
-The harness config `.typescript-ai-harness.json` is data that future ADRs can consume to allow the user to configure governance, as the ADR's are designed to be portable to other projects. This contract owns its **envelope** — file location, JSON validity, lifecycle, `version` — and a domain-blind generic **spine** every config block shares; each block ADR owns its own block wholesale. GEN-002 never learns a block's domain vocabulary, so a new block is one fence plus its own ADR and a new knob touches only its owning ADR.
+The harness config `.typescript-ai-harness.json` is data that future ADRs can consume to allow the user to configure governance, since the ADRs are designed to be portable across projects. This contract owns its **envelope** — file location, JSON validity, lifecycle, `version` — and a domain-blind generic **spine** every config block shares; each block ADR owns its own block wholesale. GEN-002 never learns a block's domain vocabulary, so a new block is one fence plus its own ADR and a new knob touches only its owning ADR.
 
 The legal config keys are not hardcoded here. Shared types split into a **core** file this contract owns (spine + `version` envelope, naming no namespace or block) and an **extension** file where each block ADR declares its block inside a marker **fence**. The fences' declared `namespace.block` paths form the closed set of legal keys, read at check time — closing the block-name-typo hole while keeping this contract domain-blind.
 
@@ -47,12 +47,11 @@ Rejected alternatives:
 
 ### 3. The generic shape and spine
 
-1. **Config Shape Validity (📜 Rule: `config-shape-valid`):** The shape, its closed keys, and their defaults are declared in [`harness-config-core.d.ts`](../harness-config-core.d.ts) — `ConfigBlock`, `PathRule`, `FileSet`, and the `Config` envelope. That file is the authoring reference; this rule enforces it domain-blind (the types aid authoring, they do not enforce — §4.2). The config is exactly `{version, [namespace]: {[block]: ConfigBlock}}`, with unknown keys rejected at every level, plus these guards, defaults, and edge cases the types cannot express:
+1. **Config Shape Validity (📜 Rule: `config-shape-valid`):** The shape, its closed keys, and their defaults are declared and documented in [`harness-config-core.d.ts`](../harness-config-core.d.ts) — `ConfigBlock`, `PathRule`, `FileSet`, and the `Config` envelope. That file is the authoring reference; this rule enforces it domain-blind (the types aid authoring, they do not enforce — §4.2). The config is exactly `{version, [namespace]: {[block]: ConfigBlock}}`, with unknown keys rejected at every level, plus the guards and cross-field invariants the types cannot express:
     1. **Namespace typo guard:** every **present** `namespace.block` key MUST match a fence-declared path — `markdown.frontmater` errors.
     2. **Optional presence:** a declared path **absent** from the config is fine — the owner's built-in default applies, so presence is never required.
     3. **Depth guard:** a block is a `ConfigBlock` exactly two key levels deep — a third nesting level errors.
-    4. **Block defaults/edges:** `unmatched` defaults to `'exempt'`; a `coverage` FileSet is present *iff* `unmatched` is `'error'` (both directions); `settings` and each entry's `rule` are opaque JSON owned by the block's ADR.
-    5. **Entry defaults/edges:** a FileSet's `include` is a non-empty array of non-empty globs; an `exempt: true` entry carries neither `rule` nor `severity`; `severity` defaults to `'error'`.
+    4. **Cross-field invariants:** a `coverage` FileSet is present *iff* `unmatched` is `'error'` (both directions), and an `exempt` entry carries neither `rule` nor `severity`. The per-field defaults and shapes those keys carry — along with the opaque `settings`/`rule` payloads — live at their declaration in the core types above, not restated here.
 2. **Evaluation grammar** (declared here, executed by block owners):
     1. **Entry files:** An entry's files are `glob(include) − glob(exclude)`.
     2. **First-match-wins:** The **ordered** `pathRules` array is evaluated first-match-wins — the first entry whose FileSet contains a file *claims* it.
