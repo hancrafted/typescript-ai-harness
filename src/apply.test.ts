@@ -161,6 +161,31 @@ describe('apply — symlink', () => {
   });
 });
 
+describe('apply — ensureGitRepo', () => {
+  it('inits a git repo when the Target is not inside one (archgate needs a work tree)', async () => {
+    // The fresh temp Target has no enclosing repo, so the very first step inits one
+    // before any file is written — otherwise archgate cannot see the symlinks.
+    await run([]);
+
+    expect(exec).toHaveBeenCalledWith('git', ['init', '--quiet'], { cwd });
+  });
+
+  it('skips git init when the Target is already inside a work tree', async () => {
+    mkdirSync(abs('.git')); // pretend cwd is a repo root
+
+    await run([]);
+
+    expect(exec).not.toHaveBeenCalledWith('git', ['init', '--quiet'], { cwd });
+  });
+
+  it('does not init under --dry-run — it only previews the intent', async () => {
+    await run([], true);
+
+    expect(exec).not.toHaveBeenCalled();
+    expect(existsSync(abs('.git'))).toBe(false);
+  });
+});
+
 describe('apply — dry-run touches nothing', () => {
   it('previews copyAsset and symlink but writes neither', async () => {
     writeFileSync(join(asset, 'f.txt'), 'x');
