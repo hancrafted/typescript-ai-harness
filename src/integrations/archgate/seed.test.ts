@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url';
+import { format, resolveConfig } from 'prettier';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FRONTMATTER } from '../../../.archgate/harness-config-fixtures';
 import { HARNESS_VERSION } from '../../harness-config';
@@ -35,9 +37,19 @@ describe('harnessConfigSeed — the seeded envelope', () => {
     expect(seed.markdown.frontmatter).toEqual(DEFAULT_FRONTMATTER);
   });
 
-  it('is pretty-printed with a trailing newline (passes prettier on self-apply)', () => {
+  it('is a prettier fixpoint with one rule per line (clean diff on self-apply)', async () => {
     const text = harnessConfigSeed();
     expect(text.endsWith('\n')).toBe(true);
-    expect(text).toBe(`${JSON.stringify(JSON.parse(text), null, 2)}\n`);
+
+    // The real contract behind the seed's shape: a self-applied config must
+    // round-trip through the repo's own prettier untouched. Assert that against
+    // the resolved config rather than a hand-rolled JSON.stringify proxy.
+    const options = (await resolveConfig(fileURLToPath(import.meta.url))) ?? {};
+    expect(await format(text, { ...options, parser: 'json' })).toBe(text);
+
+    // Each default frontmatter rule is collapsed onto a single line (the seed
+    // feedback that motivated this format); the envelope stays expanded around them.
+    const ruleLines = text.split('\n').filter((line) => line.trimStart().startsWith('{ "include":'));
+    expect(ruleLines).toHaveLength(SEED_FRONTMATTER.pathRules.length);
   });
 });
