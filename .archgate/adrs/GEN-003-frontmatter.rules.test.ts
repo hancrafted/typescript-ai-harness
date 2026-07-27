@@ -36,6 +36,10 @@ interface Reported {
 }
 
 const CONFIG_PATH = '.typescript-ai-harness.json';
+// The harness's own package name — the identity that makes the floor's version
+// equality check fire. The mock's package.json defaults to it (the dogfood/self
+// case); a foreign target overrides `packageName`, mirroring GEN-002's test.
+const HARNESS_PACKAGE_NAME = '@hancrafted/typescript-ai-harness';
 
 // Minimal glob → RegExp for the mock ctx: `**/` spans zero or more whole
 // segments (so docs/**/*.md matches docs/guide.md too), `**` spans anything,
@@ -61,14 +65,24 @@ function globToRegExp(pattern: string): RegExp {
 // entirely to model an absent config. `brokenJson` models a present config that
 // fails to parse: readFile succeeds, readJSON throws. `packageVersion`
 // overrides the harness release the mock package.json serves (`null` models an
-// unreadable one).
+// unreadable one). `packageName` defaults to the harness's own name so the
+// equality-check tests model the dogfood/self case; a foreign target passes a
+// different name (or `null` for a nameless package.json), which makes
+// harnessSelfVersion return null and the equality check skip.
 function makeCtx(
   files: Record<string, string>,
-  opts?: { config?: unknown; symlinks?: string[]; brokenJson?: boolean; packageVersion?: string | null },
+  opts?: {
+    config?: unknown;
+    symlinks?: string[];
+    brokenJson?: boolean;
+    packageVersion?: string | null;
+    packageName?: string | null;
+  },
 ) {
   const violations: Reported[] = [];
   const warnings: Reported[] = [];
   const packageVersion = opts?.packageVersion === undefined ? MOCK_HARNESS_VERSION : opts.packageVersion;
+  const packageName = opts?.packageName === undefined ? HARNESS_PACKAGE_NAME : opts.packageName;
   const symlinks = opts?.symlinks ?? [];
   const present = opts !== undefined && ('config' in opts || opts.brokenJson === true);
   const allPaths = [...Object.keys(files), ...symlinks];
@@ -93,7 +107,9 @@ function makeCtx(
         if (opts?.brokenJson) throw new SyntaxError('Unexpected end of JSON input');
         return opts?.config;
       }
-      if (path === 'package.json' && packageVersion !== null) return { version: packageVersion };
+      if (path === 'package.json' && packageVersion !== null) {
+        return packageName === null ? { version: packageVersion } : { name: packageName, version: packageVersion };
+      }
       throw new Error(`ENOENT: ${path}`);
     },
     report: {
@@ -584,6 +600,40 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
     const { ctx, violations } = makeCtx(failingFiles, { config: VERSION_MISMATCH_CONFIG });
     await floor.check(ctx);
     expect(violations).toEqual([]);
+  });
+
+  it('governs on a foreign target even though the stamp differs from the app version', async () => {
+    // The install case: config stamped with the harness release, but the target
+    // app's package.json is its own (different) version. Equality must not fire
+    // — the floor GOVERNS the target's unfrontmattered docs, where the shipped
+    // bug read the skew as "governs NOTHING" and silently disabled it. Mirrors
+    // GEN-002's identity-gated config-version.
+    for (const packageName of ['some-target-app', null]) {
+      const config = harnessConfig([{ include: ['README.md'], rule: { allowedTypes: ['docs'], label: 'title' } }]);
+      const { ctx, violations } = makeCtx(failingFiles, { config, packageName, packageVersion: '0.0.0' });
+      await floor.check(ctx);
+      expect(violations.some((v) => v.file === 'README.md' && /no YAML frontmatter block/.test(v.message))).toBe(true);
+    }
+  });
+
+  it('still governs nothing on a missing or malformed stamp in a foreign target', async () => {
+    // Equality is skipped on a foreign target, but the stamp's presence and
+    // semver shape stay required — a mis-stamped config still governs NOTHING.
+    const missing = makeCtx(failingFiles, {
+      config: VERSION_MISSING_CONFIG,
+      packageName: 'some-target-app',
+      packageVersion: '0.0.0',
+    });
+    await floor.check(missing.ctx);
+    expect(missing.violations).toEqual([]);
+
+    const malformed = makeCtx(failingFiles, {
+      config: VERSION_MALFORMED_CONFIG,
+      packageName: 'some-target-app',
+      packageVersion: '0.0.0',
+    });
+    await floor.check(malformed.ctx);
+    expect(malformed.violations).toEqual([]);
   });
 
   it('governs nothing when the version stamp is missing', async () => {
