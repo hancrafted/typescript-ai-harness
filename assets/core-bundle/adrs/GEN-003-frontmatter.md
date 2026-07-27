@@ -35,7 +35,7 @@ Rejected alternatives:
 
 ### 3. Config
 
-1. Frontmatter policy is configured in the `markdown.frontmatter` block and enforced (📜 Rule: `frontmatter-config-valid`); its option-by-option reference is [`frontmatter-config.md`](../../docs/agents/frontmatter-config.md).
+1. Frontmatter policy is configured in the `markdown.frontmatter` block and enforced (📜 Rule: `frontmatter-config-valid`); its option-by-option reference is [`frontmatter-config.md`](../frontmatter-config.md).
 
 ## Do's and Don'ts
 
@@ -68,14 +68,14 @@ Rejected alternatives:
 
 Automated: `GEN-003-frontmatter.rules.ts` enforces two `error`-tier rules (GEN-001 §7) — `frontmatter-config-valid` (the block's payload vocabulary, §3.1) and `frontmatter-floor` (§2, per-file reports at each matched entry's tier, plus coverage reports under `unmatched: 'error'`).
 
-**Manual review duties** (never linted): the built-in default still describes the intended zero-config surface; new design ADRs under `docs/adr/` are backfilled with `design-adr` frontmatter until `/domain-modeling` is patched; a raised cap or `requireDescription` is justified by the file type, not one outlier; [docs/agents/frontmatter-config.md](../../docs/agents/frontmatter-config.md) stays aligned with the payload schema this contract validates.
+**Manual review duties** (never linted): the built-in default still describes the intended zero-config surface; new design ADRs under `docs/adr/` are backfilled with `design-adr` frontmatter until `/domain-modeling` is patched; a raised cap or `requireDescription` is justified by the file type, not one outlier; [frontmatter-config.md](../frontmatter-config.md) stays aligned with the payload schema this contract validates.
 
 **Exceptions:** raise a separate ADR; human approval required.
 
 ## References
 
 - [Harness Config (GEN-002)](./GEN-002-harness-config.md) — the envelope: config file lifecycle, version envelope, fence grammar, generic spine, consumer contract.
-- [Frontmatter configuration reference](../../docs/agents/frontmatter-config.md) — every spine and block option with defaults, semantics, and recipes.
+- [Frontmatter configuration reference](../frontmatter-config.md) — every spine and block option with defaults, semantics, and recipes.
 - [Spec #19](https://github.com/hancrafted/typescript-ai-harness/issues/19), [refinement #30](https://github.com/hancrafted/typescript-ai-harness/issues/30) — where payload ownership and the fence-derived block registry are specified.
 - [Google Open Knowledge Format (OKF)](https://github.com/google/open-knowledge-format) — `type` as the sole mandatory field.
 - [Agent Skills specification](https://code.claude.com/docs/en/skills) — origin of the 64/1024 default caps.

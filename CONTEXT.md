@@ -55,7 +55,7 @@ _Avoid_: `files` (the retired field name), scope globs
 ## Frontmatter governance
 
 **Frontmatter floor**:
-The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title`. `description` and `tags` are optional, cap-checked keys; a pathRules entry's `rule` payload can make `description` mandatory via `requireDescription`. A floor, not a ceiling — an entry may require more, never less. Owned by `GEN-003-frontmatter`; full config reference in `docs/agents/frontmatter-config.md`.
+The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title`. `description` and `tags` are optional, cap-checked keys; a pathRules entry's `rule` payload can make `description` mandatory via `requireDescription`. A floor, not a ceiling — an entry may require more, never less. Owned by `GEN-003-frontmatter`; full config reference in `.archgate/frontmatter-config.md`.
 _Avoid_: frontmatter schema, header, metadata block
 
 **pathRules entry**:

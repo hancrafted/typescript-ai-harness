@@ -1,5 +1,11 @@
 {
   "ADR_CORE": ["GEN-001", "GEN-002", "GEN-003"],
-  "supportingFiles": ["harness-config-core.d.ts", "harness-config-extension.d.ts", "harness-config-fixtures.ts"],
+  "supportingFiles": [
+    "harness-config-core.d.ts",
+    "harness-config-extension.d.ts",
+    "harness-config-fixtures.ts",
+    "frontmatter-config.md",
+    "rules.d.ts"
+  ],
   "ARCHGATE_VERSION": "^0.50.0"
 }
