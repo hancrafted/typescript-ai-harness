@@ -99,3 +99,9 @@ jobs:
         run: npm run build
       - name: boot-smoke
         run: npm run smoke
+      # Real-apply foreign-target smoke: apply the plan into a fresh non-git dir
+      # with a foreign package.json and assert `archgate check` is clean — the
+      # foreign-target path neither dry-run smoke nor this repo's own check (always
+      # in-git, self-versioned) exercises. Guards the 0.1.1 first-run regression.
+      - name: apply-smoke
+        run: npm run smoke-apply

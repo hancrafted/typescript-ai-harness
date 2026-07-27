@@ -245,7 +245,7 @@ describe.each([
 ])('run — archgate v4 unified direct-write · $label', ({ yes }) => {
   const CORE = ['GEN-001-adr', 'GEN-002-harness-config', 'GEN-003-frontmatter'];
 
-  it('materialises each core ADR trio + supporting files under .archgate/, never shelling out', async () => {
+  it('materialises each core ADR trio + supporting files under .archgate/, never invoking archgate init', async () => {
     await run(FULL, { cwd, exec, yes });
 
     for (const id of CORE) {
@@ -256,8 +256,10 @@ describe.each([
     expect(has('.archgate/harness-config-core.d.ts')).toBe(true);
     expect(has('.archgate/harness-config-extension.d.ts')).toBe(true);
     expect(has('.archgate/harness-config-fixtures.ts')).toBe(true);
-    // Neither mode invokes `archgate init` or passes `--editor` (editor fixed to claude).
-    expect(calls.some((c) => c.args.includes('init'))).toBe(false);
+    // Neither mode invokes `archgate init` or passes `--editor` (editor fixed to
+    // claude). The only bare `init` shell-out is `git init` (archgate needs a
+    // work tree), so match the archgate command specifically, not any `init` arg.
+    expect(calls.some((c) => `${c.command} ${c.args.join(' ')}`.includes('archgate init'))).toBe(false);
     expect(calls.some((c) => c.args.includes('--editor'))).toBe(false);
   });
 

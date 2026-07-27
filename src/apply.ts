@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { isInsideGitWorkTree } from './git';
 import { ensurePackageJson, mergePackageJson } from './package-json';
 import type { Action, Exec } from './types';
 
@@ -32,13 +33,15 @@ const ofKind = <K extends Action['kind']>(actions: Action[], kind: K): Extract<A
 
 /**
  * The single executor for every declarative Action (ADR-0004). Steps run in a
- * fixed canonical order regardless of emission order: merge package.json →
- * gitignore → install → write configs → copy asset bundles → symlink into them
- * → run commands. Install precedes the run-commands because their binaries
- * (husky — the only shell-out left after ADR-0005 v4 retired `archgate init`)
- * must exist first; symlinks are created after the copy so their targets already
- * exist in the copied tree, and both precede the commands so a hook that runs
- * `archgate check` sees the materialised workspace.
+ * fixed canonical order regardless of emission order: ensure a git repo → ensure
+ * package.json → merge package.json → gitignore → install → write configs → copy
+ * asset bundles → symlink into them → run commands. The git repo comes first
+ * because the whole workspace must sit inside a work tree for archgate to see the
+ * symlinks (`ensureGitRepoStep`); install precedes the run-commands because their
+ * binaries (husky — the only shell-out left after ADR-0005 v4 retired `archgate
+ * init`) must exist first; symlinks are created after the copy so their targets
+ * already exist in the copied tree, and both precede the commands so a hook that
+ * runs `archgate check` sees the materialised workspace.
  * `dryRun` reports every intended change and touches nothing (ADR-0002).
  */
 export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
@@ -48,6 +51,7 @@ export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
     dryRun: opts.dryRun ?? false,
     log: opts.log ?? (() => undefined),
   };
+  await ensureGitRepoStep(ctx);
   ensurePkgStep(ctx);
   mergeStep(actions, ctx);
   appendStep(actions, ctx);
@@ -56,6 +60,21 @@ export async function apply(actions: Action[], opts: ApplyOpts): Promise<void> {
   copyAssetStep(actions, ctx);
   symlinkStep(actions, ctx);
   await commandStep(actions, ctx);
+}
+
+/**
+ * Initialise a git repository when the Target is not already inside one (US:
+ * foreign-target first-run). archgate's file walk only surfaces the
+ * `.claude/rules/*.md` symlinks under a git work tree, so a fresh, un-inited
+ * Target would false-fail `adr-claude-rules-symlink` on the very symlinks this
+ * apply just created. Checked against an *enclosing* work tree, so a Target that
+ * is a subdirectory of an existing repo is never nested. `git init` is benign
+ * and idempotent; a re-run in an already-inited Target skips it.
+ */
+async function ensureGitRepoStep(ctx: Resolved): Promise<void> {
+  if (isInsideGitWorkTree(ctx.cwd)) return;
+  ctx.log('init   git repository (archgate requires one)');
+  if (!ctx.dryRun) await ctx.exec('git', ['init', '--quiet'], { cwd: ctx.cwd });
 }
 
 function ensurePkgStep(ctx: Resolved): void {

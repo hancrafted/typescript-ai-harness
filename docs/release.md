@@ -114,10 +114,13 @@ On the `v*` tag push:
 ## Gotchas
 
 - **Deliberate, not automatic.** Merging to `main` never publishes; only a `v*` tag does.
-- **config-version (#11).** The seed is stamped with `HARNESS_VERSION`; a Target on a
-  different `package.json` version won't enforce the seeded config until the migrate step
-  lands. This repo dogfoods clean (the harness *is* the package), so it is not a release
-  blocker here.
+- **config-version ([#68](https://github.com/hancrafted/typescript-ai-harness/issues/68)).**
+  The seed is stamped with `HARNESS_VERSION`. `config-version` equality-checks the stamp only
+  where `package.json` names the harness itself, so a Target on a different `package.json`
+  version carries the stamp without a mismatch (cross-release comparison lands with the migrate
+  engine). This repo dogfoods clean (the harness *is* the package), so `npm version` still bumps
+  `package.json` and the dogfood `.typescript-ai-harness.json` version in lockstep — restamp the
+  config in the release commit, or the pre-commit `archgate check` rejects it.
 - **No token.** Trusted publishing means there is nothing to rotate — do not add an
   `NPM_TOKEN` secret.
 
