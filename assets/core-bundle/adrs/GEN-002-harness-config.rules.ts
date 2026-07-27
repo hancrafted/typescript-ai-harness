@@ -13,8 +13,11 @@
 //     well-formed, unique `namespace.block` path. The union of declared paths
 //     is the config's closed set of legal keys (the registry lives in the
 //     extension file the block owners edit, never here).
-//   - `config-version`: the top-level `version` is a semver string exactly
-//     matching the installed harness release (`package.json` `.version`).
+//   - `config-version`: the top-level `version` is a required, semver-shaped
+//     string; it is equality-checked against `package.json` `.version` only
+//     where that project IS the harness (dogfooding), the sole place the two
+//     name the same release. A foreign target carries the stamp for the migrate
+//     engine (#68) but is never equality-checked here.
 //   - `config-shape-valid`: the config is `{version, [namespace]: {[block]:
 //     ConfigBlock}}` — every present `namespace.block` key matches a declared
 //     fence path, sits exactly two key levels deep, and satisfies the generic
@@ -25,6 +28,13 @@
 const CONFIG_PATH = '.typescript-ai-harness.json';
 const PACKAGE_JSON = 'package.json';
 const EXTENSION_DTS = '.archgate/harness-config-extension.d.ts';
+
+// The harness's own package name. The exact-match envelope is only meaningful
+// where `package.json` names the harness itself — there the stamp and the
+// package version are the same release. In any other project `package.json` is
+// the target app's, not the harness's, and the harness is unresolvable under
+// ephemeral `npx`, so equality is skipped until the migrate engine (#68).
+const HARNESS_PACKAGE_NAME = '@hancrafted/typescript-ai-harness';
 
 // The envelope's single reserved top-level key; every other top-level key is a
 // namespace holding blocks.
@@ -81,13 +91,17 @@ async function tryReadJSON(ctx: RuleContext, path: string): Promise<unknown> {
   }
 }
 
-// The installed harness release — the version the config must match. Null when
-// package.json is unreadable or carries no version string; the comparison is
-// then impossible and skipped (never guessed), but presence and shape of the
-// config's own stamp are still enforced.
-async function harnessVersionOf(ctx: RuleContext): Promise<string | null> {
+// The installed harness release — the version the config must match — but ONLY
+// when the project under check is the harness itself (its package.json names the
+// harness). Null otherwise: a foreign target (package.json names the target app,
+// not the harness), an unreadable package.json, or one carrying no version. On
+// null the equality check is skipped (never guessed), while presence and shape
+// of the config's own stamp stay enforced. Gating on identity, not on reading
+// package.json at all, is what stops the foreign-target false mismatch.
+async function harnessSelfVersion(ctx: RuleContext): Promise<string | null> {
   const pkg = await tryReadJSON(ctx, PACKAGE_JSON);
-  return isRecord(pkg) && typeof pkg.version === 'string' ? pkg.version : null;
+  if (!isRecord(pkg) || pkg.name !== HARNESS_PACKAGE_NAME) return null;
+  return typeof pkg.version === 'string' ? pkg.version : null;
 }
 
 // Emits one violation; the caller's emit closes over the rule's provenance tag.
@@ -294,14 +308,14 @@ export default {
 
     'config-version': {
       description:
-        "The config's top-level `version` is the compatibility envelope: required, a semver-shaped string, exactly equal to the installed harness release (package.json .version) — the honest pre-1.0 semantics where every release may break the format; a mismatch errors naming the migrate step (loosening to semver-range compatibility arrives with it, #11). A config authored for another release is never reinterpreted under this one's semantics. No-ops when the config is absent, unparseable, or has a non-object root (config-shape-valid owns that finding), and skips the equality check — but never the shape check — when package.json yields no version to compare against.",
+        "The config's top-level `version` is the compatibility envelope: required and semver-shaped everywhere. Equality against the installed harness release is enforced only where the project under check IS the harness (its package.json names the harness) — the honest pre-1.0 semantics where every release may break the format, and the sole place the stamp and package.json name the same release; a mismatch there errors naming the migrate step (loosening to semver-range compatibility arrives with it, #68). A foreign target carries the stamp for the migrate engine but is never equality-checked (its package.json is the target app's version, and the harness is unresolvable under ephemeral npx). A config authored for another release is never reinterpreted under this one's semantics. No-ops when the config is absent, unparseable, or has a non-object root (config-shape-valid owns that finding), and skips the equality check — but never the shape check — when package.json does not name the harness or yields no version to compare against.",
       severity: 'error',
       async check(ctx) {
         const emit: Emit = (message) =>
           ctx.report.violation({ message: `Harness config ${message} (GEN-002 [config-version]).`, file: CONFIG_PATH });
         const config = await tryReadJSON(ctx, CONFIG_PATH);
         if (config === null || !isRecord(config)) return;
-        const harnessVersion = await harnessVersionOf(ctx);
+        const harnessVersion = await harnessSelfVersion(ctx);
         const stamp = config[VERSION_KEY];
         if (stamp === undefined) {
           emit(

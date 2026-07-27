@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_FRONTMATTER } from '../../../.archgate/harness-config-fixtures';
 import { HARNESS_VERSION } from '../../harness-config';
-import { configVersionNote, harnessConfigSeed, SEED_FRONTMATTER } from './template';
+import { harnessConfigSeed, SEED_FRONTMATTER } from './template';
 
 // Unit-level guards for the harness-config seed (#49). The materialised-file
 // behaviour (write-if-absent, seed-once, dry-run) is asserted through run() in
@@ -39,24 +39,5 @@ describe('harnessConfigSeed — the seeded envelope', () => {
     const text = harnessConfigSeed();
     expect(text.endsWith('\n')).toBe(true);
     expect(text).toBe(`${JSON.stringify(JSON.parse(text), null, 2)}\n`);
-  });
-});
-
-describe('configVersionNote — the config-version advisory', () => {
-  it('fires when the stamped version differs from the Target package.json version', () => {
-    const note = configVersionNote('0.1.0', '1.2.3');
-    expect(note).not.toBeNull();
-    expect(note).toContain('0.1.0');
-    expect(note).toContain('1.2.3');
-    expect(note).toMatch(/config-version/);
-    expect(note).toMatch(/#11/); // points at the migrate step
-  });
-
-  it('stays silent when the versions match (this repo dogfoods clean)', () => {
-    expect(configVersionNote('0.1.0', '0.1.0')).toBeNull();
-  });
-
-  it('stays silent when the Target declares no version to compare (GEN-002 §1.4.3)', () => {
-    expect(configVersionNote('0.1.0', null)).toBeNull();
   });
 });

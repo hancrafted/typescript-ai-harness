@@ -9,7 +9,9 @@
 // extension .archgate/harness-config-extension.d.ts (defaults to a canonical
 // two-fence source; pass `extension` to override, `null` to model absence),
 // and package.json (defaults to the fixtures' MOCK_HARNESS_VERSION — deliberately
-// not this repo's real version — `null` models an unreadable one). Canonical
+// not this repo's real version — `null` models an unreadable one; its `name`
+// defaults to the harness's own so config-version's equality check fires, and a
+// foreign target overrides `packageName`). Canonical
 // pass/fail configs come from the shared conformance fixtures, which
 // GEN-003-frontmatter.rules.test.ts consumes too — the drift tripwire between
 // the envelope validator and the block consumer. A final suite runs the rules
@@ -42,6 +44,10 @@ interface Reported {
 const CONFIG_PATH = '.typescript-ai-harness.json';
 const PACKAGE_JSON = 'package.json';
 const EXTENSION_DTS = '.archgate/harness-config-extension.d.ts';
+// The harness's own package name — the identity that makes config-version's
+// equality check fire. The mock's package.json defaults to it (the dogfood/self
+// case); a foreign target overrides `packageName`.
+const HARNESS_PACKAGE_NAME = '@hancrafted/typescript-ai-harness';
 
 // A canonical extension source: two fences from two owning ADRs. The second
 // declares a block no test config carries — a declared path absent from the
@@ -74,12 +80,18 @@ function makeCtx(opts?: {
   brokenJson?: boolean;
   extension?: string | null;
   packageVersion?: string | null;
+  packageName?: string | null;
 }) {
   const violations: Reported[] = [];
   const warnings: Reported[] = [];
   const configPresent = opts !== undefined && ('config' in opts || opts.brokenJson === true);
   const extension = opts?.extension === undefined ? VALID_EXTENSION : opts.extension;
   const packageVersion = opts?.packageVersion === undefined ? MOCK_HARNESS_VERSION : opts.packageVersion;
+  // Defaults to the harness's own name so equality-check tests model the
+  // dogfood/self case; a foreign target passes a different name (or null for a
+  // nameless package.json), which makes harnessSelfVersion return null and the
+  // equality check skip.
+  const packageName = opts?.packageName === undefined ? HARNESS_PACKAGE_NAME : opts.packageName;
   const ctx = {
     projectRoot: '/repo',
     scopedFiles: [],
@@ -99,7 +111,9 @@ function makeCtx(opts?: {
         if (opts?.brokenJson) throw new SyntaxError('Unexpected end of JSON input');
         return opts?.config;
       }
-      if (path === PACKAGE_JSON && packageVersion !== null) return { version: packageVersion };
+      if (path === PACKAGE_JSON && packageVersion !== null) {
+        return packageName === null ? { version: packageVersion } : { name: packageName, version: packageVersion };
+      }
       throw new Error(`ENOENT: ${path}`);
     },
     report: {
@@ -300,6 +314,34 @@ describe('config-version', () => {
     const { ctx, violations } = makeCtx({ config: VERSION_MALFORMED_CONFIG, packageVersion: null });
     await configVersion.check(ctx);
     expect(violations.some((v) => /'version' must be a semver string/.test(v.message))).toBe(true);
+  });
+
+  it('skips the equality check in a foreign target — package.json is not the harness', async () => {
+    // The install case: config stamped with the harness release, but the target
+    // app's package.json is its own (mismatched) version. Equality must not fire.
+    for (const packageName of ['some-target-app', null]) {
+      const { ctx, violations } = makeCtx({ config: VERSION_MISMATCH_CONFIG, packageName, packageVersion: '0.0.0' });
+      await configVersion.check(ctx);
+      expect(violations).toEqual([]);
+    }
+  });
+
+  it('still requires the stamp and semver shape in a foreign target', async () => {
+    const missing = makeCtx({
+      config: VERSION_MISSING_CONFIG,
+      packageName: 'some-target-app',
+      packageVersion: '0.0.0',
+    });
+    await configVersion.check(missing.ctx);
+    expect(missing.violations.some((v) => /'version' is required/.test(v.message))).toBe(true);
+
+    const malformed = makeCtx({
+      config: VERSION_MALFORMED_CONFIG,
+      packageName: 'some-target-app',
+      packageVersion: '0.0.0',
+    });
+    await configVersion.check(malformed.ctx);
+    expect(malformed.violations.some((v) => /'version' must be a semver string/.test(v.message))).toBe(true);
   });
 });
 

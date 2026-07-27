@@ -30,10 +30,11 @@ Rejected alternatives:
 1. **Location:** Harness config is a single JSON file, `.typescript-ai-harness.json`, at the repo root — separate from `.archgate/config.json`. JSON, not YAML: archgate reads it natively (`ctx.readJSON`) and ships no YAML parser.
 2. **Seeded, never patched:** The CLI writes the file once at install and never touches it on re-run. Upgrades are an explicit, interactive **migrate step** — show the diff, restamp the version — never a silent rewrite.
 3. **JSON Validity (📜 Rule: `config-json-parses`):** A present file MUST parse. A file that exists but is not valid JSON is an error — never a silent fall-back to defaults, which would enforce policy the file no longer describes.
-4. **Version Envelope (📜 Rule: `config-version`):** The top-level `version` is required and MUST be a semver string.
-    1. **Exact match:** It MUST equal the installed harness release (`package.json` `.version`); a mismatch errors and names the migrate step. A config authored for another release is never reinterpreted under this one's semantics.
-    2. **Pre-1.0 honesty:** Exact-match is deliberate — every `0.x` release may break the format. Loosening to semver-range compatibility arrives with the migrate step.
-    3. **No source of truth:** When `package.json` yields no version, the equality check is skipped — never guessed — while the stamp's presence and semver shape stay enforced.
+4. **Version Envelope (📜 Rule: `config-version`):** The top-level `version` is required and MUST be a semver string everywhere.
+    1. **Exact match, self only:** The stamp MUST equal the installed harness release **only where `package.json` names the harness itself** (`@hancrafted/typescript-ai-harness` — dogfooding), the sole project where the stamp and `package.json` `.version` name the same release; a mismatch there errors and names the migrate step. A config authored for another release is never reinterpreted under this one's semantics.
+    2. **Foreign target carries, never compares:** In any other project `package.json` `.version` is the target app's, not the harness's, and the harness is unresolvable under ephemeral `npx` — so the stamp is carried for the migrate engine but never equality-checked, else a fresh install would false-fail on install. Cross-release comparison lands with the migrate engine ([#68](https://github.com/hancrafted/typescript-ai-harness/issues/68)).
+    3. **Pre-1.0 honesty:** Exact-match (where it applies) is deliberate — every `0.x` release may break the format. Loosening to semver-range compatibility arrives with the migrate engine.
+    4. **No source of truth:** When `package.json` does not name the harness or yields no version, the equality check is skipped — never guessed — while the stamp's presence and semver shape stay enforced.
 
 ### 2. The config extension — fence-derived registry
 
@@ -123,4 +124,4 @@ Automated: `GEN-002-harness-config.rules.ts` enforces four `error`-tier rules (G
 - [Distribution model (ADR-0001)](../../docs/adr/0001-github-git-spec-tsx-distribution.md) — the runtime-dependency firewall that forces JSON over YAML.
 - [archgate integration (ADR-0005)](../../docs/adr/0005-archgate-integration.md) — seeds the config in target projects.
 - Spec [#19](https://github.com/hancrafted/typescript-ai-harness/issues/19), refinement [#30](https://github.com/hancrafted/typescript-ai-harness/issues/30) — the envelope/block restructure and core/extension split this contract implements.
-- Deferred: [#11 seeding, migrate step, semver-range compatibility](https://github.com/hancrafted/typescript-ai-harness/issues/11), [#7 AST-harden the meta-parsers](https://github.com/hancrafted/typescript-ai-harness/issues/7), [#9 real-binary gate](https://github.com/hancrafted/typescript-ai-harness/issues/9).
+- Deferred: [#68 config-version migrate engine (older→newer transform, semver-range compatibility)](https://github.com/hancrafted/typescript-ai-harness/issues/68), [#7 AST-harden the meta-parsers](https://github.com/hancrafted/typescript-ai-harness/issues/7), [#9 real-binary gate](https://github.com/hancrafted/typescript-ai-harness/issues/9).

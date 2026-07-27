@@ -77,30 +77,14 @@ export const SEED_FRONTMATTER = {
  * Seeded `.typescript-ai-harness.json` (GEN-002 §1): the config envelope
  * stamping the harness release `version` over GEN-003's default frontmatter
  * block. A **Seeded** config file — written once, never patched on re-run; an
- * upgrade is the explicit migrate step (#11), never a silent rewrite. Two-space
- * JSON with a trailing newline so the file passes prettier on self-apply.
+ * upgrade is the explicit migrate engine (#68), never a silent rewrite. The
+ * stamp records which harness release wrote the config; GEN-002's `config-version`
+ * equality-checks it only where `package.json` names the harness itself, so a
+ * foreign Target carries the stamp without a mismatch. Two-space JSON with a
+ * trailing newline so the file passes prettier on self-apply.
  */
 export const harnessConfigSeed = (): string =>
   `${JSON.stringify({ version: HARNESS_VERSION, markdown: { frontmatter: SEED_FRONTMATTER } }, null, 2)}\n`;
-
-/**
- * Post-run advisory (ADR-0010 §6). The seed stamps the harness release
- * (`HARNESS_VERSION`), but GEN-002's `config-version` rule compares that stamp
- * against the **Target's own** `package.json` version. In a foreign Target the
- * two differ, so archgate will not enforce the freshly-seeded config until the
- * migrate step (#11) restamps it — surface that up-front so it does not read as
- * a governance failure. Returns null when the versions match (this repo
- * dogfoods clean — the harness *is* the package) or the Target declares no
- * version to compare against (GEN-002 §1.4.3 skips the check, never guesses).
- */
-export function configVersionNote(stamped: string, targetVersion: string | null): string | null {
-  if (targetVersion === null || targetVersion === stamped) return null;
-  return (
-    `.typescript-ai-harness.json was stamped version ${stamped} (this harness release), but this ` +
-    `project's package.json is ${targetVersion}. archgate's config-version rule requires they match, ` +
-    `so it will not enforce the seeded config until the migrate step restamps it (#11).`
-  );
-}
 
 /**
  * Append-only `.gitignore` entry for archgate's generated runtime. `rules.d.ts`
