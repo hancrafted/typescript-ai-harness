@@ -32,6 +32,7 @@
     "capture": "tsx scripts/capture.ts",
     "self-apply": "tsx scripts/self-apply.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "smoke-apply": "tsx scripts/smoke-apply.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "format": "prettier --write .",
