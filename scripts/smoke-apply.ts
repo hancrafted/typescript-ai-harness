@@ -6,6 +6,12 @@
 // real plan into a throwaway NON-git dir carrying a foreign `package.json`, then
 // runs `archgate check` against it and asserts a clean report.
 //
+// The clean report alone cannot tell a live floor from a dead one — a silently
+// disabled floor is *also* clean (issue #71). So after the baseline the smoke
+// seeds a deliberately non-conformant governed file and asserts `archgate check`
+// now FAILS, proving GEN-003's frontmatter floor actually governs a foreign
+// Target and did not skip it on a false version skew.
+//
 // `exec` runs `git` for real (so the auto-init actually creates the `.git` that
 // makes archgate surface the `.claude/rules` symlinks) but no-ops the toolchain
 // install and husky — `archgate check` needs neither, and skipping them keeps the
@@ -68,6 +74,28 @@ function assertArchgateClean(cwd: string): void {
   }
 }
 
+// (d) the negative control: README.md carries a docs-typed entry in the seeded
+// default, so one with no frontmatter is a frontmatter-floor violation. Seeding
+// it AFTER the clean baseline turns the smoke into a live test of the floor — a
+// disabled floor (issue #71) would leave the check green here too.
+function seedNonConformant(cwd: string): void {
+  writeFileSync(join(cwd, 'README.md'), '# No frontmatter — the frontmatter floor must reject this.\n');
+}
+
+// The load-bearing negative assertion: with a non-conformant governed file
+// present, archgate check MUST now fail (non-zero exit — the same exit-code
+// signal assertArchgateClean reads, not stdout). A clean report here would prove
+// the floor is silently dead on a foreign Target.
+function assertArchgateFails(cwd: string): void {
+  const check = spawnSync(ARCHGATE, ['check'], { cwd, encoding: 'utf8' });
+  if (check.status === 0) {
+    fail(
+      'archgate check passed on a foreign Target carrying an unfrontmattered README.md — ' +
+        'the frontmatter floor is silently disabled (issue #71).',
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const cwd = mkdtempSync(join(tmpdir(), 'harness-apply-smoke-'));
   try {
@@ -75,10 +103,15 @@ async function main(): Promise<void> {
     await run({ integrations: registry.map((integration) => integration.id) }, { cwd, exec, yes: true });
     assertMaterialised(cwd);
     assertArchgateClean(cwd);
+    seedNonConformant(cwd);
+    assertArchgateFails(cwd);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
-  console.log('✓ smoke-apply: fresh non-git foreign Target — git inited, ADRs symlinked, archgate check clean.');
+  console.log(
+    '✓ smoke-apply: fresh non-git foreign Target — git inited, ADRs symlinked, archgate check clean, ' +
+      'and the frontmatter floor rejects a non-conformant governed file (live on a foreign Target).',
+  );
 }
 
 main();

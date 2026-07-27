@@ -29,11 +29,21 @@
 const CONFIG_PATH = '.typescript-ai-harness.json';
 // Deliberate copy of GEN-002's version probe and semver shape check (rules
 // files cannot share runtime code): the config's top-level `version` must be a
-// semver-shaped string equal to the installed harness release in package.json,
-// or this consumer refuses to interpret the file — a config authored for
-// another release is never read with this one's semantics. The shared
-// conformance fixtures are the drift tripwire.
+// semver-shaped string, and — only where the project under check IS the harness
+// (its package.json names the harness) — equal to that installed release, or
+// this consumer refuses to interpret the file. A config authored for another
+// release is never read with this one's semantics. On a foreign target the
+// stamp is carried for the migrate engine (#68) but never equality-checked, so
+// the floor governs there exactly as it does when the harness dogfoods itself.
+// The shared conformance fixtures are the drift tripwire.
 const PACKAGE_JSON = 'package.json';
+// The harness's own package name — the identity that makes the version equality
+// check fire, deliberately duplicated from GEN-002 (rule files share no runtime
+// code). Only where package.json names the harness are the stamp and the
+// package version the same release; on any foreign target package.json is the
+// app's, and the harness is unresolvable under ephemeral `npx`, so equality is
+// skipped until the migrate engine (#68).
+const HARNESS_PACKAGE_NAME = '@hancrafted/typescript-ai-harness';
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 // Default ceilings (OKF/Agent-Skills for label and description); an entry's
@@ -236,13 +246,19 @@ function payloadProblems(block: Record<string, unknown>): string[] {
   return problems;
 }
 
-// The installed harness release the config's top-level `version` must match.
-// Null when package.json is unreadable or carries no version string — the
-// comparison is then impossible and skipped (never guessed), mirroring
-// GEN-002's config-version rule.
-async function harnessVersionOf(ctx: RuleContext): Promise<string | null> {
+// The installed harness release the config's top-level `version` must match —
+// but ONLY when the project under check is the harness itself (its package.json
+// names the harness). Null otherwise: a foreign target (package.json names the
+// target app, not the harness), an unreadable package.json, or one carrying no
+// version. On null the equality check is skipped (never guessed), while the
+// presence and shape of the config's own stamp stay enforced. Gating on
+// identity — not on reading package.json at all — is what stops the
+// foreign-target false skew that silently disabled the floor. Mirrors GEN-002's
+// harnessSelfVersion.
+async function harnessSelfVersion(ctx: RuleContext): Promise<string | null> {
   const pkg = await tryReadJSON(ctx, PACKAGE_JSON);
-  return isRecord(pkg) && typeof pkg.version === 'string' ? pkg.version : null;
+  if (!isRecord(pkg) || pkg.name !== HARNESS_PACKAGE_NAME) return null;
+  return typeof pkg.version === 'string' ? pkg.version : null;
 }
 
 // Locate markdown.frontmatter under the consumer contract. Returns the block
@@ -257,8 +273,8 @@ async function resolveBlock(ctx: RuleContext): Promise<Record<string, unknown> |
   const config = await tryReadJSON(ctx, CONFIG_PATH);
   if (!isRecord(config)) return null; // present but unparseable (or a non-object root)
   if (typeof config.version !== 'string' || !SEMVER_RE.test(config.version)) return null; // stamp missing or malformed — present but invalid
-  const harnessVersion = await harnessVersionOf(ctx);
-  if (harnessVersion !== null && config.version !== harnessVersion) return null; // version skew — never interpret another release's data
+  const harnessVersion = await harnessSelfVersion(ctx);
+  if (harnessVersion !== null && config.version !== harnessVersion) return null; // version skew in the self/dogfood case — never interpret another release's data (foreign targets skip this, mirroring GEN-002)
   const md = config.markdown;
   if (md === undefined) return DEFAULT_CONFIG; // namespace absent in a healthy envelope — default
   if (!isRecord(md)) return null;
