@@ -2,7 +2,13 @@ import { join, posix } from 'node:path';
 import { readBundleLayout, resolveBundleRoot } from '../../bundle';
 import { ADR_CORE, supportingFiles } from '../../harness-config';
 import type { Action, Integration } from '../../types';
-import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, harnessConfigSeed, RULES_DTS_IGNORE } from './template';
+import {
+  ARCHGATE_DEP,
+  archgateConfig,
+  claudeSettingsLocal,
+  harnessConfigSeed,
+  RULES_DTS_PRETTIER_IGNORE,
+} from './template';
 
 /**
  * archgate Integration — **unified deterministic direct-write** (ADR-0005 v4).
@@ -23,7 +29,12 @@ import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, harnessConfigSeed, R
  * - `copyAsset` per bundle file — each `ADR_CORE` id's `.md` + `.rules.ts` +
  *   `.rules.test.ts` plus the supporting files, resolved from the running CLI's
  *   bundle root ({@link resolveBundleRoot}). **Tool-owned**: overwritten on every
- *   run to bring a brownfield Target to the current governance release.
+ *   run to bring a brownfield Target to the current governance release. The
+ *   supporting files include the `@generated` `.archgate/rules.d.ts` (archgate's
+ *   ambient rule types) — seeded so a Target can author its **own** ADR
+ *   `.rules.ts` with working types and `tsc` before its first `archgate check`,
+ *   which regenerates the same file byte-for-byte under the pinned version — and
+ *   `frontmatter-config.md`, the harness-config how-to (ADR-0010 §3).
  * - `symlink` per core ADR — a real `.claude/rules/<name>.md` back to the ADR
  *   (GEN-001 §6). Real-symlink-only; a copy would invert `adr-claude-rules-symlink`.
  * - `writeFile` (write-if-absent) — the **Seeded** `.typescript-ai-harness.json`
@@ -32,12 +43,18 @@ import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, harnessConfigSeed, R
  *   `.claude/settings.local.json`, so a developer's own edits survive a re-run.
  *   Seeding the harness config materialises exactly the policy GEN-003 applies
  *   by default (a behaviour no-op) but makes it visible and editable (ADR-0010 §6).
- * - `appendLines` — the `.archgate/rules.d.ts` gitignore entry (that file is
- *   `@generated` by `archgate check`, so it is ignored, never written).
+ * - `appendLines` — `.archgate/rules.d.ts` into `.prettierignore` (append-only):
+ *   the committed copy is `@generated` in archgate's own style, so it is excluded
+ *   from `prettier --check` rather than reformatted (a reformat would drift from
+ *   what `archgate check` regenerates).
  *
- * Deliberately not written: `rules.d.ts`, a `lint/` placeholder, and — retired in
- * v4 — the empty `.archgate/adrs/.gitkeep` (the directory now holds real, governed
- * ADRs). No global `~/.claude` plugin install; the `archgate plugin install`
+ * `rules.d.ts` is `@generated` by `archgate check`, but the CLI still seeds the
+ * committed copy as a Tool-owned bundle file (above) so the governance workspace
+ * type-checks from the first run; it is committed, not gitignored — the v4
+ * `.gitignore` entry is retired (ADR-0005 v5, ADR-0002). Deliberately not written: a
+ * `lint/` placeholder, and — retired in v4 — the empty `.archgate/adrs/.gitkeep`
+ * (the directory now holds real, governed ADRs). No global `~/.claude` plugin
+ * install; the `archgate plugin install`
  * reminder is a post-run note in **both** modes (US-13). Editor is fixed to
  * `claude`; other editors remain a deferred per-editor-snapshot slot.
  *
@@ -70,7 +87,7 @@ export const archgate: Integration = {
       { kind: 'writeFile', path: '.typescript-ai-harness.json', contents: harnessConfigSeed(), overwrite: false },
       { kind: 'writeFile', path: '.archgate/config.json', contents: archgateConfig(), overwrite: false },
       { kind: 'writeFile', path: '.claude/settings.local.json', contents: claudeSettingsLocal(), overwrite: false },
-      { kind: 'appendLines', path: '.gitignore', lines: RULES_DTS_IGNORE },
+      { kind: 'appendLines', path: '.prettierignore', lines: RULES_DTS_PRETTIER_IGNORE },
     ];
   },
 };

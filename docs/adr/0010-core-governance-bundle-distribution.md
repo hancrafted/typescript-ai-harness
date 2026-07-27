@@ -39,7 +39,7 @@ Membership is deliberately an explicit list, not a glob of whatever `GEN-*` exis
 "Three ADRs" is three *bundles*. GEN-001's own rules make the following mandatory members — omitting any fails `archgate check` in the Target:
 
 - **Per core ADR:** its `.md` + `.rules.ts` + `.rules.test.ts` (`adr-rules-test-sibling` requires the sibling to exist) + a real `.claude/rules/<name>.md` symlink (`adr-claude-rules-symlink`, for any non-empty `paths:`).
-- **Supporting files:** `harness-config-core.d.ts`, `harness-config-extension.d.ts` (GEN-002/003 reference them), the shared fixtures (§7), and `frontmatter-config.md`.
+- **Supporting files:** `harness-config-core.d.ts`, `harness-config-extension.d.ts` (GEN-002/003 reference them), the shared fixtures (§7), `frontmatter-config.md` (the harness-config how-to, relocated under `.archgate/`), and the `@generated` `rules.d.ts` (archgate's ambient rule types, committed and seeded so a Target type-checks its own ADR `.rules.ts` before its first `archgate check`; ADR-0005 v5).
 
 The Target footprint is confined to `.archgate/**` plus the `.claude/rules/` symlinks — core does not bleed into the Target's `test/` tree (§7). Core does **not** force-install vitest: the `.rules.test.ts` files are archgate-satisfying artifacts a Target *may* run if it also selected vitest.
 

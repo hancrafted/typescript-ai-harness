@@ -68,13 +68,15 @@ describe('harness.config.json — the baked build config', () => {
   });
 
   it('lists exactly the .archgate/-relative supporting files that exist today', () => {
-    // frontmatter-config.md (ADR-0010 §3) is deliberately deferred until it
-    // ships alongside a dedicated frontmatter-config skill — do not add it here
-    // until the file exists under .archgate/, or #47's capture breaks.
+    // frontmatter-config.md (the harness-config how-to) and the @generated
+    // rules.d.ts now ship as supporting files — both live under .archgate/ and
+    // are captured after the ADR trios (see bundle.readBundleLayout order).
     expect(supportingFiles).toEqual([
       'harness-config-core.d.ts',
       'harness-config-extension.d.ts',
       'harness-config-fixtures.ts',
+      'frontmatter-config.md',
+      'rules.d.ts',
     ]);
   });
 

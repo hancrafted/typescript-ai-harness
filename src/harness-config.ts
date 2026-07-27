@@ -32,15 +32,13 @@ export interface HarnessConfig {
   ADR_CORE: string[];
   /**
    * The `.archgate/`-relative supporting files the bundle carries beyond the
-   * per-ADR trios: the two `harness-config-*.d.ts` (GEN-002/003 reference them)
-   * and the shared fixtures both `.rules.test.ts` import (ADR-0010 §3, §7).
-   *
-   * `frontmatter-config.md` (named in ADR-0010 §3) is intentionally absent: it
-   * lives at `docs/agents/frontmatter-config.md` today, outside `.archgate/`,
-   * and will be added here only once it ships alongside a dedicated
-   * frontmatter-config skill that becomes its reference — tracked with the
-   * capture work (#47). Listing it before the file exists under `.archgate/`
-   * would point that capture at a missing path.
+   * per-ADR trios: the two `harness-config-*.d.ts` (GEN-002/003 reference them),
+   * the shared fixtures both `.rules.test.ts` import (ADR-0010 §3, §7),
+   * `frontmatter-config.md` (the harness-config how-to, ADR-0010 §3), and the
+   * `@generated` `rules.d.ts` — archgate's ambient rule types, committed and
+   * seeded so a Target type-checks its own ADR `.rules.ts` before its first
+   * `archgate check` (which regenerates the same file byte-for-byte under the
+   * pinned version; ADR-0005 v5, ADR-0002).
    */
   supportingFiles: string[];
   /**

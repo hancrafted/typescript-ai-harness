@@ -108,18 +108,18 @@ Rejected alternatives:
 
 Automated: `GEN-002-harness-config.rules.ts` enforces four `error`-tier rules (GEN-001 §7) — `config-json-parses` (§1.3), `config-version` (§1.4), `config-extension-fenced` (§2.2), `config-shape-valid` (§3.1). All no-op when the config is absent; the fence rule also no-ops when the extension file is absent. Block payloads and interpretation are enforced by their owners (frontmatter: GEN-003).
 
-**Manual review duties** (never linted): the core types match what the validator accepts; each fence's contents stay within its declared `namespace.block` and match the owning ADR's payload schema; each fence's ADR id names a real, owning ADR; [docs/agents/frontmatter-config.md](../../docs/agents/frontmatter-config.md) stays aligned with the envelope and spine.
+**Manual review duties** (never linted): the core types match what the validator accepts; each fence's contents stay within its declared `namespace.block` and match the owning ADR's payload schema; each fence's ADR id names a real, owning ADR; [frontmatter-config.md](../frontmatter-config.md) stays aligned with the envelope and spine.
 
 **Toolchain:** `.archgate/**` is outside the repo's eslint gate; prettier and vitest cover the rules and tests, `tsc --noEmit` covers both `.d.ts` files and the fixtures, and `.typescript-ai-harness.json` is prettier-checked. `archgate check` gates this ADR, the config, and the extension's fences.
 
-**Templates/scaffolding:** deferred — the CLI will seed `.typescript-ai-harness.json` (stamping `version`), `harness-config-core.d.ts`, and `harness-config-extension.d.ts` (never `rules.d.ts`), and implement the migrate step.
+**Templates/scaffolding:** the CLI seeds `.typescript-ai-harness.json` (stamping `version`), the two `harness-config-*.d.ts`, and the generated `rules.d.ts` (a committed byte-mirror archgate regenerates, never hand-authored — §4.2); the migrate step is deferred ([#68](https://github.com/hancrafted/typescript-ai-harness/issues/68)).
 
 **Exceptions:** raise a separate ADR; human approval required.
 
 ## References
 
 - [Frontmatter Contract (GEN-003)](./GEN-003-frontmatter.md) — the first block owner; its fence declares `markdown.frontmatter`.
-- [Frontmatter configuration reference](../../docs/agents/frontmatter-config.md) — option-by-option user reference for the envelope, spine, and frontmatter block.
+- [Frontmatter configuration reference](../frontmatter-config.md) — option-by-option user reference for the envelope, spine, and frontmatter block.
 - [ADR Contract (GEN-001)](./GEN-001-adr.md) — the shape and runtime-loading contract this ADR self-hosts under.
 - [Distribution model (ADR-0001)](../../docs/adr/0001-github-git-spec-tsx-distribution.md) — the runtime-dependency firewall that forces JSON over YAML.
 - [archgate integration (ADR-0005)](../../docs/adr/0005-archgate-integration.md) — seeds the config in target projects.
