@@ -1,6 +1,6 @@
 {
   "name": "@hancrafted/typescript-ai-harness",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Interactive CLI to install and update a standard dev-tooling harness (archgate, eslint, prettier, vitest, husky) in any Node/TypeScript project.",
   "homepage": "https://github.com/hancrafted/typescript-ai-harness#readme",
   "bugs": {
