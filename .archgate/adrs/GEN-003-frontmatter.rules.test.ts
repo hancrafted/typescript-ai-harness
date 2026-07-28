@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRONTMATTER,
   DEPTH_VIOLATION_CONFIG,
+  EXCLUDE_FILES_LITERAL_INCLUDE_CONFIG,
   MOCK_HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
@@ -463,13 +464,13 @@ describe('frontmatter-floor', () => {
     expect(violations).toEqual([]);
   });
 
-  it("an entry's exclude makes the file fall through to a LATER entry (not exempt)", async () => {
+  it("an entry's excludeFiles makes the file fall through to a LATER entry (not exempt)", async () => {
     const m = harnessConfig([
-      { include: ['docs/**/*.md'], exclude: ['docs/adr/*.md'], rule: { label: 'name' } },
+      { include: ['docs/**/*.md'], excludeFiles: ['docs/adr/a.md'], rule: { label: 'name' } },
       { include: ['docs/adr/*.md'], rule: { label: 'title' } },
     ]);
     // The file violates the SECOND entry's pin (title), proving the first
-    // entry's exclude did not claim it and the second entry governs it.
+    // entry's excludeFiles did not claim it and the second entry governs it.
     const files = { 'docs/adr/a.md': md('type: design-adr\nname: "a"\ndescription: "Why."') };
     const { ctx, violations } = makeCtx(files, { config: m });
     await floor.check(ctx);
@@ -477,7 +478,7 @@ describe('frontmatter-floor', () => {
   });
 
   it('an excluded file matching no later entry falls to unmatched (exempt by default)', async () => {
-    const m = harnessConfig([{ include: ['docs/**/*.md'], exclude: ['docs/notes.md'], rule: { label: 'title' } }]);
+    const m = harnessConfig([{ include: ['docs/**/*.md'], excludeFiles: ['docs/notes.md'], rule: { label: 'title' } }]);
     const files = { 'docs/notes.md': '# no frontmatter, excluded\n' };
     const { ctx, violations } = makeCtx(files, { config: m });
     await floor.check(ctx);
@@ -489,6 +490,39 @@ describe('frontmatter-floor', () => {
     const { ctx, violations } = makeCtx(files, { config: adrRules });
     await floor.check(ctx);
     expect(violations).toEqual([]);
+  });
+
+  it('warns on a dead excludeFiles path that removes no file from its include set', async () => {
+    const m = harnessConfig([
+      {
+        include: ['docs/**/*.md'],
+        excludeFiles: ['docs/typo.md'], // absent from the include set — a dead carve-out
+        rule: { allowedTypes: ['design-adr'], label: 'title', requireDescription: true },
+      },
+    ]);
+    const files = { 'docs/a.md': md('type: design-adr\ntitle: "A"\ndescription: "Why."') };
+    const { ctx, violations, warnings } = makeCtx(files, { config: m });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+    expect(warnings.some((w) => /excludeFiles path 'docs\/typo\.md' removes no file/.test(w.message))).toBe(true);
+  });
+
+  it('does not warn when an excludeFiles path removes a real file from its include set', async () => {
+    const m = harnessConfig([
+      {
+        include: ['docs/**/*.md'],
+        excludeFiles: ['docs/skip.md'],
+        rule: { allowedTypes: ['design-adr'], label: 'title' },
+      },
+    ]);
+    const files = {
+      'docs/a.md': md('type: design-adr\ntitle: "A"'),
+      'docs/skip.md': '# excluded, no frontmatter\n',
+    };
+    const { ctx, violations, warnings } = makeCtx(files, { config: m });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 
   it('skips a governed file that cannot be read (a symlink)', async () => {
@@ -557,10 +591,13 @@ describe("frontmatter-floor coverage (unmatched: 'error')", () => {
   });
 
   it('an entry-excluded file inside coverage is NOT claimed — it surfaces as a coverage violation', async () => {
-    const m = harnessConfig([{ include: ['docs/**/*.md'], exclude: ['docs/carved.md'], rule: { label: 'title' } }], {
-      unmatched: 'error',
-      coverage: { include: ['docs/**/*.md'] },
-    });
+    const m = harnessConfig(
+      [{ include: ['docs/**/*.md'], excludeFiles: ['docs/carved.md'], rule: { label: 'title' } }],
+      {
+        unmatched: 'error',
+        coverage: { include: ['docs/**/*.md'] },
+      },
+    );
     const files = {
       'docs/kept.md': md('type: doc\ntitle: "K"'),
       'docs/carved.md': md('type: doc\ntitle: "C"'), // excluded → unclaimed → in-coverage violation
@@ -594,6 +631,15 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
     const { ctx, violations } = makeCtx(failingFiles, { config: PAYLOAD_TYPO_CONFIG });
     await floor.check(ctx);
     expect(violations).toEqual([]);
+  });
+
+  it('governs nothing on excludeFiles paired with a wildcard-free include', async () => {
+    // Mirrors GEN-002's config-shape-valid rejection: what the spine refuses,
+    // the floor must refuse to govern by (the shared-fixture drift tripwire).
+    const { ctx, violations, warnings } = makeCtx(failingFiles, { config: EXCLUDE_FILES_LITERAL_INCLUDE_CONFIG });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+    expect(warnings).toEqual([]);
   });
 
   it('governs nothing on a version skew against the installed harness release', async () => {
@@ -673,7 +719,7 @@ describe('frontmatter-floor consumer contract (all-or-nothing)', () => {
   it('governs by the shared VALID_CONFIG fixture end to end', async () => {
     const files = {
       'docs/adr/good.md': md('type: design-adr\ntitle: "Good"\ndescription: "Why."'),
-      'docs/adr/DRAFT-x.md': '# excluded → falls to unmatched (exempt)\n',
+      'docs/adr/DRAFT.md': '# excluded → falls to unmatched (exempt)\n',
       '.agents/tool.md': '# exempt-claimed\n',
       'README.md': '# missing frontmatter → warning-tier entry\n',
     };

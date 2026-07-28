@@ -59,7 +59,7 @@ The minimum YAML frontmatter every *governed* markdown file must carry: `type` +
 _Avoid_: frontmatter schema, header, metadata block
 
 **pathRules entry**:
-One ordered element of a Config block's `pathRules`, claiming a FileSet of files (`include` minus `exclude`) first-match-wins and carrying one policy: *exempt* (claims and waives the floor) or *governed* (Spine keys plus an optional block-owned `rule` payload). An entry `exclude` does NOT exempt — the file falls through to later entries, then to `unmatched`. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
+One ordered element of a Config block's `pathRules`, claiming a FileSet of files (`include` minus `excludeFiles`) first-match-wins and carrying one policy: *exempt* (claims and waives the floor) or *governed* (Spine keys plus an optional block-owned `rule` payload). An entry `excludeFiles` path does NOT exempt — the file falls through to later entries, then to `unmatched`. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
 _Avoid_: Zone (retired name), scope, surface
 
 **Harness config**:
@@ -79,7 +79,7 @@ The generic, domain-blind grammar every path-scoped Config block satisfies, owne
 _Avoid_: schema (ambiguous), envelope (that's the file-level contract)
 
 **FileSet**:
-The `{include, exclude}` glob pair naming a set of files by arithmetic: `glob(include) − glob(exclude)`. `include` is always a non-empty array. Used by every pathRules entry and by `coverage`; excluding a file from an entry lets it fall through, excluding it from `coverage` removes it from the strict universe.
+The `{include, excludeFiles}` pair naming a set of files: `glob(include)` minus the literal paths in `excludeFiles`. `include` is always a non-empty array of globs; `excludeFiles` is optional literal file paths (no wildcards), meaningful only when `include` carries a wildcard. Used by every pathRules entry and by `coverage`; excluding a file from an entry lets it fall through, excluding it from `coverage` removes it from the strict universe.
 _Avoid_: match (retired name), glob (the FileSet holds globs; it isn't one)
 
 **rule (pathRules payload)**:

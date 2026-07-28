@@ -13,13 +13,16 @@ declare namespace Harness {
   /** The tier a pathRules entry's violations emit at. Default: 'error'. */
   type EntryTier = 'error' | 'warning';
 
-  /** A set of files by glob arithmetic: glob(include) − glob(exclude). */
+  /** A set of files: glob(include) minus the literal paths in excludeFiles. */
   interface FileSet {
     /** Non-empty array of non-empty globs, relative to the repo root. */
     include: string[];
-    /** Files matched here fall OUTSIDE the set — for a pathRules entry that
-     * means fall-through to later entries, never an exempt claim. */
-    exclude?: string[];
+    /** Literal file paths (no wildcards), relative to the repo root, that fall
+     * OUTSIDE the set — for a pathRules entry that means fall-through to later
+     * entries, never an exempt claim. Present only when `include` carries a
+     * wildcard: a literal-path include names one file, so carving from it is
+     * contradictory (config-shape-valid). */
+    excludeFiles?: string[];
   }
 
   /** One ordered pathRules entry. First matching entry claims a file. */

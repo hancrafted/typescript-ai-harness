@@ -32,6 +32,7 @@ Rejected alternatives:
 2. **`Label`:** exactly one of `name` xor `title`, non-empty, no longer than `maxLabel`. When the entry pins a label, only that key MAY appear — the unpinned label, or both, is a violation.
 3. **`description`:** optional; required when the entry sets `requireDescription`. When present, no longer than `maxDescription`.
 4. **`tags`:** optional; a comma-separated list, each tag kebab-case and no longer than `maxTag`. No closed set, no count limit.
+5. **Dead carve-out:** while resolving an entry's FileSet, an `excludeFiles` path that removes no file from that entry's `include` set is reported at warning tier — a typo'd or already-out-of-scope path is surfaced, not silently inert. GEN-002's spine already bans `excludeFiles` on a wildcard-free include; this catches the path that is well-formed but matches nothing.
 
 ### 3. Config
 
@@ -43,6 +44,7 @@ Rejected alternatives:
 
 1. **DO** give every governed markdown file `type`, matching its `allowedTypes` (Decision 2, 📜 Rule: `frontmatter-floor`)
 2. **DO** set `type: draft` when a file's permanent type is unsettled (`settings.draftEscape` on) — the floor still applies, unlike `exempt`, which lifts it entirely.
+3. **DO** heed the dead-carve-out warning — an `excludeFiles` path that removes no file is a typo or a stale path; fix or drop it. (Decision 2)
 
 ### Don'ts
 
