@@ -1,3 +1,6 @@
 {
-  "agent": "scarlet"
+  "agent": "scarlet",
+  "enabledPlugins": {
+    "mattpocock-skills@claude-plugins-official": true
+  }
 }
