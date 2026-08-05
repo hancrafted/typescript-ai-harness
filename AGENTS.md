@@ -18,10 +18,10 @@ The core workflow
 ## Rules
 
 1. Do not auto-include yourself in the commit message.
-2. Sessions with /wayfinder and /grill-with-docs skills should adhere to these formating rules
-   1. There can be response to previous decision or a introduction section, but always place a W or H question and then list numbered options, provide at least 2-3 options each
+2. Sessions with `/wayfinder` and `/grill-with-docs` or `grilling` skills should adhere to these formating rules
+   1. There can be a response to previous decision or a introduction section, but always formulate wh-question before the list of numbered options.
    2. Provide Recommendation at the end and the reason why
-   3. Generally use simple wordings and an inverted pyramid style to convey information, but always use technically precise words, DONT invent words. The user will ask follow-up questions if technical depth is needed.
+   3. Talk in ASD-STE100 Simplified Technical English, and use the ubiquitous language from `CONTEXT.md`. Use a inverted pyramid style to convey information.
 
 ## Commits
 
