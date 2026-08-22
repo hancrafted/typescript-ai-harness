@@ -1,0 +1,122 @@
+#!/bin/sh
+# Wires this repository's `commit-msg` git hook to the gate that ships with the
+# `commit` skill. Backs `/commit --setup-husky`.
+#
+# Idempotent: running it twice leaves the same result and says so. Every change
+# is reported, so the result can be reviewed before it is committed.
+#
+# Reads no arguments. Run it from anywhere inside the target repository.
+
+set -u
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/lib/rules.sh"
+. "$script_dir/lib/git.sh"
+. "$script_dir/lib/report.sh"
+. "$script_dir/lib/hook.sh"
+
+changes=''
+note_change() {
+  changes="$changes  • $1
+"
+}
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || root=''
+if [ -z "$root" ]; then
+  gate_abort 'not inside a git repository' 'Run this from the repository you want to gate.'
+fi
+cd "$root" || gate_abort "cannot enter $root"
+
+# The gate has to be reachable from the committed tree, or the hook is a dead
+# link for every other clone and for CI.
+gate=''
+for candidate in $(gate_candidate_paths); do
+  if [ -f "$candidate" ]; then
+    gate=$candidate
+    break
+  fi
+done
+if [ -z "$gate" ]; then
+  gate_abort 'cannot find the commit gate — refusing to write a hook that would not run' \
+    "looked for: $GATE_INSTALLED_PATH" \
+    "       and: $GATE_REPO_PATH" \
+    'Install the skill at project scope:  npx skills add hancrafted/skills' \
+    'The likeliest cause is an install performed with --copy, which gives each agent its' \
+    'own copy and destroys the single canonical path this hook depends on.'
+fi
+
+# husky is a Node dev dependency; without a package.json there is nothing to
+# hang it off.
+if [ ! -f package.json ]; then
+  gate_abort 'no package.json — husky cannot be installed here' \
+    'The gate itself needs only POSIX shell and git, so a non-Node repository can still use it:' \
+    "  git config core.hooksPath .githooks   &&   mkdir -p .githooks" \
+    "  then create .githooks/commit-msg containing:  exec sh $gate \"\$1\"" \
+    'See assets/setup-husky.md for the full manual wiring.'
+fi
+
+# 1. husky itself.
+if [ ! -d .husky/_ ]; then
+  if [ ! -d node_modules/husky ]; then
+    printf 'Installing husky…\n'
+    npm install --save-dev husky >/dev/null || gate_abort 'npm install --save-dev husky failed'
+    note_change 'installed husky as a dev dependency'
+  fi
+  npx husky >/dev/null 2>&1 || gate_abort 'npx husky failed to initialise .husky/'
+  note_change 'initialised .husky/'
+fi
+
+# `prepare` is what re-wires hooks on a fresh clone, so it is checked even when
+# .husky/ already exists — otherwise the gate silently stops running for everyone
+# who clones next. An existing `prepare` is never clobbered.
+#
+# Read through npm rather than grepping the file: `"prepare"` appears in plenty of
+# nested tool config, and a false match here means the hooks quietly stop wiring.
+# An existing `prepare` that skips husky gets a warning for the same reason: left
+# silent, the gate dies on the next fresh clone.
+_setup_prepare=$(npm pkg get scripts.prepare 2>/dev/null)
+if [ "$_setup_prepare" = '{}' ]; then
+  npm pkg set scripts.prepare=husky >/dev/null || gate_abort 'npm pkg set scripts.prepare=husky failed'
+  note_change 'set the package.json `prepare` script to `husky`'
+elif ! printf '%s' "$_setup_prepare" | grep -q husky; then
+  gate_warn \
+    "the existing package.json \`prepare\` script ($_setup_prepare) never runs husky, so the hook will not wire on a fresh clone." \
+    'Keep it, and put husky in front:  npm pkg set "scripts.prepare=husky && <existing>"'
+fi
+
+# 2. The hook, whose body is shared with the TypeScript AI harness so both paths
+#    judge commits identically.
+mkdir -p .husky || gate_abort 'could not create .husky/'
+desired=$(gate_hook_body)
+existing=''
+if [ -f .husky/commit-msg ]; then
+  existing=$(cat .husky/commit-msg)
+fi
+if [ "$desired" != "$existing" ]; then
+  printf '%s\n' "$desired" >.husky/commit-msg || gate_abort 'could not write .husky/commit-msg'
+  chmod +x .husky/commit-msg || gate_abort 'could not make .husky/commit-msg executable'
+  if [ -n "$existing" ]; then
+    note_change "rewrote .husky/commit-msg to delegate to $gate"
+  else
+    note_change "wrote .husky/commit-msg, delegating to $gate"
+  fi
+fi
+
+# 3. The comment character. Without this the gate passes a compliant message and
+#    git's own cleanup then deletes the body's `### <category>` headings, because
+#    they begin with the default comment character. The commit would look right
+#    at commit time and be stored unmineable.
+comment_string=$(git_comment_string)
+if rules_comment_string_eats_headings "$comment_string"; then
+  git config core.commentChar ';' || gate_abort 'could not set core.commentChar'
+  note_change "set core.commentChar to ';' (was '$comment_string') so '### ' headings survive git cleanup"
+fi
+
+if [ -z "$changes" ]; then
+  printf '✔ commit gate already wired via husky — unchanged.\n'
+  exit 0
+fi
+
+printf '✔ commit gate wired via husky.\n\nChanged:\n%s\n' "$changes"
+printf 'Commit .husky/commit-msg so the gate runs for every clone and in CI.\n'
+printf 'core.commentChar is local to this clone; it is not committed.\n'

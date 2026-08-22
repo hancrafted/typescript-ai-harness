@@ -1,4 +1,11 @@
 {
   "version": 1,
-  "skills": {}
+  "skills": {
+    "commit": {
+      "source": "hancrafted/skills",
+      "sourceType": "github",
+      "skillPath": "skills/commit/SKILL.md",
+      "computedHash": "4c9886a21262ad9e63907071a5d9f530d8a42e20883e9dd14a1bae4ba9acdcd4"
+    }
+  }
 }

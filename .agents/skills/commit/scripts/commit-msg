@@ -1,0 +1,112 @@
+#!/bin/sh
+# The commit gate that ships with the `commit` skill.
+#
+# Reads the proposed commit message from the file named by $1 and exits 0 to
+# allow the commit or 1 to reject it. Depends on nothing beyond POSIX shell and
+# git, so it behaves identically on a laptop and in a container.
+#
+# Three blocking conditions — header, body shape, `Source:` trailer — and two
+# exemptions. The contract is documented in ../SKILL.md; where the prose and this
+# script differ, this script is the contract.
+#
+# This file is orchestration only. The predicates live in lib/rules.sh, the git
+# probes in lib/git.sh, and the diagnostics in lib/report.sh.
+
+set -u
+
+script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+
+# The gate is this file plus lib/. An install that took only the entry file would
+# otherwise fail with a bare "not found" from the first `.` below.
+for lib in rules git report; do
+  if [ ! -f "$script_dir/lib/$lib.sh" ]; then
+    printf '✖ commit gate is incomplete: %s/lib/%s.sh is missing\n' "$script_dir" "$lib" >&2
+    printf '  The gate is the whole scripts/ directory, not just this file.\n' >&2
+    printf '  Reinstall the skill: npx skills add hancrafted/skills\n' >&2
+    exit 1
+  fi
+done
+
+. "$script_dir/lib/rules.sh"
+. "$script_dir/lib/git.sh"
+. "$script_dir/lib/report.sh"
+
+if [ "$#" -lt 1 ]; then
+  gate_abort 'no commit message file given' 'usage: commit-msg <path-to-message-file>'
+fi
+
+message_file=$1
+if [ ! -f "$message_file" ]; then
+  gate_abort "commit message file not found: $message_file"
+fi
+
+comment_string=$(git_comment_string)
+raw=$(cat "$message_file")
+
+# Judge what git will store, not the scratch file the editor left behind.
+message=$(rules_checkable_message "$raw" "$comment_string")
+header=$(rules_line "$message" 1)
+
+# Exemption 1 — `fixup!` / `squash!`, so `--autosquash` keeps working.
+if rules_is_autosquash "$header"; then
+  exit 0
+fi
+
+# Exemption 2 — a local merge commit being concluded. `git merge --no-ff` does
+# fire this hook, and its generated message cannot pass the header check.
+if git_merge_in_progress; then
+  exit 0
+fi
+
+# Condition 1 — the header.
+if ! rules_header_ok "$message"; then
+  report_header_failure "$message"
+fi
+
+# Condition 2 — the body's shape.
+body_problem=$(rules_body_problem "$message") || report_body_failure "$message" "$body_problem"
+
+# Condition 3 — a `Source:` trailer git can actually parse. Every value found is
+# checked; one usable value is enough, and repeats are fine.
+source_values=$(git_source_values "$message_file")
+if [ -z "$source_values" ]; then
+  report_source_failure "git's trailer parser found no Source: trailer at all"
+else
+  source_ok=0
+  source_problem=''
+  while IFS= read -r source_value; do
+    value_problem=$(rules_source_problem "$source_value")
+    if [ -z "$value_problem" ]; then
+      source_ok=1
+    elif [ -z "$source_problem" ]; then
+      source_problem=$value_problem
+    fi
+  done <<SOURCES
+$source_values
+SOURCES
+  if [ "$source_ok" -eq 0 ]; then
+    report_source_failure "$source_problem"
+  fi
+fi
+
+if [ "$gate_rejected" -eq 1 ]; then
+  gate_footer
+  exit 1
+fi
+
+# Passed. One thing left to say: on the editor path git is about to run
+# `cleanup=strip` and delete every line starting with the comment character —
+# which is exactly what the body's `### <category>` headings start with under the
+# default configuration. The commit would look compliant here and be stored
+# without its headings, which is the failure this gate exists to prevent.
+if rules_comment_string_eats_headings "$comment_string" &&
+  rules_has_git_comment_lines "$raw" "$comment_string" &&
+  printf '%s\n' "$message" | grep -q '^### '; then
+  gate_warn \
+    "core.commentChar is '$comment_string', so git will strip this message's '### ' headings after this hook." \
+    'The commit will be stored without them, and its body will not be mineable.' \
+    'Fix it once per repository:  git config core.commentChar ";"' \
+    'Or run:  /commit --setup-husky'
+fi
+
+exit 0
