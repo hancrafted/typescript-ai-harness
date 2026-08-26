@@ -11,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HARNESS_VERSION } from './harness-config';
 import { run } from './run';
 import type { Answers, Exec } from './types';
 
@@ -237,13 +236,13 @@ describe('run — external commands', () => {
 // against one identical set of expectations. The bundle is copied from this repo's
 // committed assets/core-bundle asset (resolveBundleRoot always returns the asset,
 // #48) — kept byte-equal to canonical by the freshness guard — so the target ends
-// up with the real GEN-001/002/003 trios and .claude/rules symlinks, and each
+// up with the real GEN-001 trio and its .claude/rules symlink, and each
 // copyAsset.from points into the asset, not the live .archgate/.
 describe.each([
   { label: 'interactive (no --yes)', yes: false },
   { label: 'headless (--yes)', yes: true },
 ])('run — archgate v4 unified direct-write · $label', ({ yes }) => {
-  const CORE = ['GEN-001-adr', 'GEN-002-harness-config', 'GEN-003-frontmatter'];
+  const CORE = ['GEN-001-adr'];
 
   it('materialises each core ADR trio + supporting files under .archgate/, never invoking archgate init', async () => {
     await run(FULL, { cwd, exec, yes });
@@ -253,11 +252,24 @@ describe.each([
       expect(has(`.archgate/adrs/${id}.rules.ts`)).toBe(true);
       expect(has(`.archgate/adrs/${id}.rules.test.ts`)).toBe(true);
     }
-    expect(has('.archgate/harness-config-core.d.ts')).toBe(true);
-    expect(has('.archgate/harness-config-extension.d.ts')).toBe(true);
-    expect(has('.archgate/harness-config-fixtures.ts')).toBe(true);
-    expect(has('.archgate/frontmatter-config.md')).toBe(true);
     expect(has('.archgate/rules.d.ts')).toBe(true); // @generated types, seeded so the Target type-checks its own ADRs
+    // The shrink's negative control. GEN-002/GEN-003 and the four supporting
+    // files they needed still govern THIS repo, so they stay under .archgate/
+    // here — but they must not reach a Target. Every assertion above passes just
+    // as well if a stale copyAsset quietly puts one back, which is why the
+    // absences are asserted rather than left implied.
+    for (const id of ['GEN-002-harness-config', 'GEN-003-frontmatter']) {
+      expect(has(`.archgate/adrs/${id}.md`)).toBe(false);
+      expect(has(`.claude/rules/${id.toLowerCase()}.md`)).toBe(false);
+    }
+    for (const file of [
+      'harness-config-core.d.ts',
+      'harness-config-extension.d.ts',
+      'harness-config-fixtures.ts',
+      'frontmatter-config.md',
+    ]) {
+      expect(has(`.archgate/${file}`)).toBe(false);
+    }
     // Neither mode invokes `archgate init` or passes `--editor` (editor fixed to
     // claude). The only bare `init` shell-out is `git init` (archgate needs a
     // work tree), so match the archgate command specifically, not any `init` arg.
@@ -269,7 +281,7 @@ describe.each([
     await run(FULL, { cwd, exec, yes });
 
     const link = join(cwd, '.claude/rules/gen-001-adr.md');
-    expect(lstatSync(link).isSymbolicLink()).toBe(true); // a copy would invert archgate's rule
+    expect(lstatSync(link).isSymbolicLink()).toBe(true); // the only real symlink check left — archgate's reader resolves symlinks, so its rule cannot tell a copy from a pointer
     expect(readlinkSync(link)).toBe('../../.archgate/adrs/GEN-001-adr.md'); // relative, stored verbatim
     expect(readFileSync(link, 'utf8')).toBe(read('.archgate/adrs/GEN-001-adr.md')); // resolves through
     // Lowercased basename, matching how the symlink is created and what archgate's
@@ -297,22 +309,9 @@ describe.each([
     expect(read('.prettierignore')).toContain('.archgate/rules.d.ts');
   });
 
-  it('seeds .typescript-ai-harness.json from GEN-003 default frontmatter + a version stamp', async () => {
+  it('writes no .typescript-ai-harness.json — the config it configured no longer ships', async () => {
     await run(FULL, { cwd, exec, yes });
-
-    const harnessConfig = JSON.parse(read('.typescript-ai-harness.json'));
-    // Stamped with the harness release (GEN-002 §1.4), not the target's version.
-    expect(harnessConfig.version).toBe(HARNESS_VERSION);
-    // The materialised block is GEN-003's built-in default, verbatim: unmatched
-    // exempt + the four root-or-specific entries, so seeding is a behaviour no-op.
-    const block = harnessConfig.markdown.frontmatter;
-    expect(block.unmatched).toBe('exempt');
-    expect(block.pathRules.flatMap((entry: { include: string[] }) => entry.include)).toEqual([
-      '.archgate/adrs/*.md',
-      'README.md',
-      'AGENTS.md',
-      'CLAUDE.md',
-    ]);
+    expect(has('.typescript-ai-harness.json')).toBe(false);
   });
 
   it('retires the empty adrs/.gitkeep — the dir now holds real, governed ADRs', async () => {
@@ -339,13 +338,14 @@ describe('run — dry run', () => {
   it('reports the plan but writes nothing and runs no command', async () => {
     const { actions } = await run(FULL, { cwd, exec, dryRun: true, yes: true });
     expect(actions.length).toBeGreaterThan(0);
-    // The seed action IS in the previewed plan (dry-run *previews* it) …
-    expect(actions.some((a) => a.kind === 'writeFile' && a.path === '.typescript-ai-harness.json')).toBe(true);
+    // The seed action is gone from the plan itself, not merely unwritten — a
+    // dry run previews every writeFile, so this would still be true if the
+    // action survived and only the disk write were suppressed.
+    expect(actions.some((a) => a.kind === 'writeFile' && a.path === '.typescript-ai-harness.json')).toBe(false);
     expect(has('package.json')).toBe(false);
     expect(has('eslint.config.mjs')).toBe(false);
     expect(has('.archgate/config.json')).toBe(false);
-    expect(has('.claude/settings.local.json')).toBe(false);
-    expect(has('.typescript-ai-harness.json')).toBe(false); // … but nothing is written to disk
+    expect(has('.claude/settings.local.json')).toBe(false); // … and nothing is written to disk
     expect(calls).toHaveLength(0);
   });
 });
@@ -376,18 +376,15 @@ describe('run — idempotency', () => {
     // The Target project grows its governance workspace after scaffolding.
     const cfg = JSON.stringify({ domains: { ARCH: { adrs: ['ARCH-001'] } }, baseBranch: 'origin/develop' }, null, 2);
     const settings = JSON.stringify({ agent: 'my-own-agent' }, null, 2);
-    const harnessCfg = JSON.stringify({ version: '9.9.9', markdown: {} }, null, 2);
     writeFileSync(join(cwd, '.archgate/config.json'), cfg);
     writeFileSync(join(cwd, '.claude/settings.local.json'), settings);
-    writeFileSync(join(cwd, '.typescript-ai-harness.json'), harnessCfg);
     // A hand-edit to a Tool-owned bundle file, to prove the contrast: the seed
     // is left alone while the bundle IS overwritten on the same re-run.
     writeFileSync(join(cwd, '.archgate/adrs/GEN-001-adr.md'), 'CLOBBERED');
 
     await run(FULL, { cwd, exec, yes: true });
     expect(read('.archgate/config.json')).toBe(cfg); // never clobbered
-    expect(read('.claude/settings.local.json')).toBe(settings);
-    expect(read('.typescript-ai-harness.json')).toBe(harnessCfg); // Seeded: write-once
+    expect(read('.claude/settings.local.json')).toBe(settings); // Seeded: write-once
     expect(read('.archgate/adrs/GEN-001-adr.md')).not.toBe('CLOBBERED'); // Tool-owned: overwritten
   });
 });

@@ -2,13 +2,7 @@ import { join, posix } from 'node:path';
 import { readBundleLayout, resolveBundleRoot } from '../../bundle';
 import { ADR_CORE, supportingFiles } from '../../harness-config';
 import type { Action, Integration } from '../../types';
-import {
-  ARCHGATE_DEP,
-  archgateConfig,
-  claudeSettingsLocal,
-  harnessConfigSeed,
-  RULES_DTS_PRETTIER_IGNORE,
-} from './template';
+import { ARCHGATE_DEP, archgateConfig, claudeSettingsLocal, RULES_DTS_PRETTIER_IGNORE } from './template';
 
 /**
  * archgate Integration — **unified deterministic direct-write** (ADR-0005 v4).
@@ -33,16 +27,15 @@ import {
  *   supporting files include the `@generated` `.archgate/rules.d.ts` (archgate's
  *   ambient rule types) — seeded so a Target can author its **own** ADR
  *   `.rules.ts` with working types and `tsc` before its first `archgate check`,
- *   which regenerates the same file byte-for-byte under the pinned version — and
- *   `frontmatter-config.md`, the harness-config how-to (ADR-0010 §3).
+ *   which regenerates the same file byte-for-byte under the pinned version.
  * - `symlink` per core ADR — a real `.claude/rules/<name>.md` back to the ADR
- *   (GEN-001 §6). Real-symlink-only; a copy would invert `adr-claude-rules-symlink`.
- * - `writeFile` (write-if-absent) — the **Seeded** `.typescript-ai-harness.json`
- *   (the harness config, GEN-002/003: the default frontmatter block stamped with
- *   this harness release), `.archgate/config.json`, and
+ *   (GEN-001 §6). Real-symlink-only: archgate's reader resolves symlinks, so a
+ *   copy is invisible to its rule and would silently freeze the Target's context.
+ * - `writeFile` (write-if-absent) — the **Seeded** `.archgate/config.json` and
  *   `.claude/settings.local.json`, so a developer's own edits survive a re-run.
- *   Seeding the harness config materialises exactly the policy GEN-003 applies
- *   by default (a behaviour no-op) but makes it visible and editable (ADR-0010 §6).
+ *   No `.typescript-ai-harness.json`: it configures the frontmatter governance
+ *   the bundle no longer ships, so seeding one would hand a Target a config file
+ *   with no reader.
  * - `appendLines` — `.archgate/rules.d.ts` into `.prettierignore` (append-only):
  *   the committed copy is `@generated` in archgate's own style, so it is excluded
  *   from `prettier --check` rather than reformatted (a reformat would drift from
@@ -84,7 +77,6 @@ export const archgate: Integration = {
       { kind: 'installDeps', dev: [...this.devDependencies] },
       ...copyBundle,
       ...linkRules,
-      { kind: 'writeFile', path: '.typescript-ai-harness.json', contents: harnessConfigSeed(), overwrite: false },
       { kind: 'writeFile', path: '.archgate/config.json', contents: archgateConfig(), overwrite: false },
       { kind: 'writeFile', path: '.claude/settings.local.json', contents: claudeSettingsLocal(), overwrite: false },
       { kind: 'appendLines', path: '.prettierignore', lines: RULES_DTS_PRETTIER_IGNORE },

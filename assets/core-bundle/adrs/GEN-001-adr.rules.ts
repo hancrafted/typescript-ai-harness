@@ -316,7 +316,7 @@ export default {
 
     'adr-claude-rules-symlink': {
       description:
-        'Every ADR with a non-empty paths: has a .claude/rules/<basename-lowercased>.md symlink (a pointer, never a copied body) to it; an ADR with empty/absent paths: has none; no orphaned ADR symlink lingers.',
+        'Every ADR with a non-empty paths: has a .claude/rules/<basename-lowercased>.md runtime entry; an ADR with empty/absent paths: has none; no orphaned ADR entry lingers. Presence only — the reader resolves symlinks, so a copied body is indistinguishable from a pointer.',
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));

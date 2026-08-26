@@ -64,29 +64,33 @@ describe('parseHarnessConfig — rejects malformed input', () => {
 
 describe('harness.config.json — the baked build config', () => {
   it('names the core ADR membership, ordered and explicit', () => {
-    expect(ADR_CORE).toEqual(['GEN-001', 'GEN-002', 'GEN-003']);
+    expect(ADR_CORE).toEqual(['GEN-001']);
   });
 
   it('lists exactly the .archgate/-relative supporting files that exist today', () => {
-    // frontmatter-config.md (the harness-config how-to) and the @generated
-    // rules.d.ts now ship as supporting files — both live under .archgate/ and
-    // are captured after the ADR trios (see bundle.readBundleLayout order).
-    expect(supportingFiles).toEqual([
-      'harness-config-core.d.ts',
-      'harness-config-extension.d.ts',
-      'harness-config-fixtures.ts',
-      'frontmatter-config.md',
-      'rules.d.ts',
-    ]);
+    // Only the @generated rules.d.ts, which GEN-001 needs to type-check a
+    // Target's own ADR .rules.ts. The four the frontmatter ADRs needed are not
+    // shipped: they still govern this repo, so they live under .archgate/ and
+    // stay out of the bundle.
+    expect(supportingFiles).toEqual(['rules.d.ts']);
   });
 
-  it('pins the archgate version, unchanged from the retired template.ts constant', () => {
-    expect(ARCHGATE_VERSION).toBe('^0.50.0');
+  it('pins the archgate version to the release that generated the committed rules.d.ts', () => {
+    // Load-bearing, and not obviously so. `archgate check` regenerates
+    // .archgate/rules.d.ts from the running binary's own type surface, and
+    // `npm run capture` mirrors it into assets/core-bundle/. CI installs on a
+    // cold cache, so this range decides which binary regenerates the file
+    // there — and npm's caret pins the minor for 0.x, making `^0.55.0` mean
+    // >=0.55.0 <0.56.0. Let this drift below the version that generated the
+    // committed rules.d.ts and CI's capture-freshness guard goes red on a file
+    // nobody edited.
+    expect(ARCHGATE_VERSION).toBe('^0.55.0');
   });
 
-  it('exposes the harness release version from package.json (the seed stamp source)', () => {
-    // The seed stamps HARNESS_VERSION into .typescript-ai-harness.json; it must
-    // track package.json (npm's source of truth), never a hand-copied literal.
+  it('exposes the harness release version from package.json', () => {
+    // Test-only since the harness-config seed was dropped, and kept deliberately:
+    // it must track package.json (npm's source of truth), never a hand-copied
+    // literal, so it is still correct whenever it regains a consumer.
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(HARNESS_VERSION).toBe(pkg.version);
   });

@@ -17,9 +17,8 @@
 // bundle (`.archgate/**` + `.claude/rules/`), which `npm install` never touches;
 // archgate is already a pinned devDependency, so a real install would only add
 // network flakiness to a determinism guard. The write-if-absent seeds
-// (`.typescript-ai-harness.json`, `.archgate/config.json`,
-// `.claude/settings.local.json`) are inert too — they already exist here, so the
-// install skips them. Repo-local release tooling — never shipped into Target
+// (`.archgate/config.json`, `.claude/settings.local.json`) are inert too — they
+// already exist here, so the install skips them. Repo-local release tooling — never shipped into Target
 // projects (ADR-0003).
 import { projectRootOf } from '../src/bundle';
 import { run } from '../src/run';

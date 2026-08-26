@@ -6,11 +6,11 @@
 // real plan into a throwaway NON-git dir carrying a foreign `package.json`, then
 // runs `archgate check` against it and asserts a clean report.
 //
-// The clean report alone cannot tell a live floor from a dead one — a silently
-// disabled floor is *also* clean (issue #71). So after the baseline the smoke
-// seeds a deliberately non-conformant governed file and asserts `archgate check`
-// now FAILS, proving GEN-003's frontmatter floor actually governs a foreign
-// Target and did not skip it on a false version skew.
+// The clean report alone cannot tell a live contract from a dead one — a
+// silently disabled contract is *also* clean (issue #71). So after the baseline
+// the smoke seeds a deliberately non-conformant ADR and asserts `archgate check`
+// now FAILS, proving GEN-001 actually governs a foreign Target and did not skip
+// it on a false version skew.
 //
 // `exec` runs `git` for real (so the auto-init actually creates the `.git` that
 // makes archgate surface the `.claude/rules` symlinks) but no-ops the toolchain
@@ -29,7 +29,51 @@ import type { Exec } from '../src/types';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ARCHGATE = join(REPO, 'node_modules', '.bin', 'archgate');
-const CORE_LINKS = ['gen-001-adr.md', 'gen-002-harness-config.md', 'gen-003-frontmatter.md'];
+const CORE_LINKS = ['gen-001-adr.md'];
+
+// The negative control's payload. Frontmatter is deliberately CORRECT — the five
+// required keys, in GEN-001's order, and `rules: false` so no sibling .rules.ts is
+// owed — because the file has to parse before the contract can reject it. What is
+// wrong is structural: `## References` is missing from the six canonical sections.
+const NEGATIVE_CONTROL_ADR = `---
+type: adr
+id: SMK-001
+title: "Apply-smoke negative control"
+domain: general
+rules: false
+---
+
+# Apply-smoke negative control
+
+## Context
+
+Planted by the apply smoke to prove GEN-001 governs a foreign Target. Deliberately
+missing its \`## References\` section.
+
+## Decision
+
+### 1. Anchor
+
+1. This ADR exists to be rejected.
+
+## Do's and Don'ts
+
+### Do's
+
+1. **DO** expect \`archgate check\` to fail while this file is present.
+
+### Don'ts
+
+1. **DON'T** add the missing section — that is the whole assertion.
+
+## Consequences
+
+None; the file is deleted with the temp Target.
+
+## Compliance and Enforcement
+
+\`adr-required-sections\`, at error tier.
+`;
 
 // Real git, no-op everything else — see the header.
 const exec: Exec = async (command, args, { cwd }) => {
@@ -74,24 +118,37 @@ function assertArchgateClean(cwd: string): void {
   }
 }
 
-// (d) the negative control: README.md carries a docs-typed entry in the seeded
-// default, so one with no frontmatter is a frontmatter-floor violation. Seeding
-// it AFTER the clean baseline turns the smoke into a live test of the floor — a
-// disabled floor (issue #71) would leave the check green here too.
+// (d) the negative control. Seeded AFTER the clean baseline, so the smoke is a
+// live test of GEN-001 rather than of an empty rule set — a disabled contract
+// (issue #71) would leave the check green here too.
+//
+// Observed on a real apply, which is the only reason this file is trusted to be
+// the right shape: pass:false, errors:1, unparsedAdrs:[], exit 1, with
+// `adr-required-sections` reporting "ADR is missing the mandatory section
+// '## References' (GEN-001 [adr-required-sections])".
+//
+// Parsing cleanly is the whole trick. An ADR malformed in its *frontmatter* fails
+// archgate's schema and drops into the advisory `unparsedAdrs` instead, leaving
+// the run at {"pass":true,"total":0} and exit 0 — which this control would read as
+// a dead contract. `--strict` is the only flag that fails on that advisory, and
+// the check below passes no flags, so the planted file must parse and THEN break a
+// rule.
 function seedNonConformant(cwd: string): void {
-  writeFileSync(join(cwd, 'README.md'), '# No frontmatter — the frontmatter floor must reject this.\n');
+  writeFileSync(join(cwd, '.archgate/adrs/SMK-001-negative-control.md'), NEGATIVE_CONTROL_ADR);
 }
 
-// The load-bearing negative assertion: with a non-conformant governed file
-// present, archgate check MUST now fail (non-zero exit — the same exit-code
-// signal assertArchgateClean reads, not stdout). A clean report here would prove
-// the floor is silently dead on a foreign Target.
+// The load-bearing negative assertion: with a rule-violating ADR present,
+// archgate check MUST now fail (non-zero exit — the same exit-code signal
+// assertArchgateClean reads, not stdout). A clean report here would prove GEN-001
+// is silently dead on a foreign Target.
 function assertArchgateFails(cwd: string): void {
   const check = spawnSync(ARCHGATE, ['check'], { cwd, encoding: 'utf8' });
   if (check.status === 0) {
     fail(
-      'archgate check passed on a foreign Target carrying an unfrontmattered README.md — ' +
-        'the frontmatter floor is silently disabled (issue #71).',
+      'archgate check passed on a foreign Target carrying an ADR with no `## References` section — ' +
+        "either GEN-001 is silently disabled (issue #71), or the planted ADR failed archgate's " +
+        'schema and dropped out into the advisory `unparsedAdrs`, which leaves a bare `check` at ' +
+        'exit 0. Re-run with `--strict` to tell the two apart.',
     );
   }
 }
@@ -110,7 +167,7 @@ async function main(): Promise<void> {
   }
   console.log(
     '✓ smoke-apply: fresh non-git foreign Target — git inited, ADRs symlinked, archgate check clean, ' +
-      'and the frontmatter floor rejects a non-conformant governed file (live on a foreign Target).',
+      'and GEN-001 rejects an ADR missing a mandatory section (live on a foreign Target).',
   );
 }
 
