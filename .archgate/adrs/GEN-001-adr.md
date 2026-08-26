@@ -24,13 +24,13 @@ Rejected alternative: a generator that copies each ADR body into `.claude/rules/
 
 1. This contract governs every ADR markdown and `.rules.ts` file under `.archgate/adrs/` whose basename matches `<PREFIX>-<NNN>-<slug>.{md,ts}`.
 2. GEN-001 is self-hosting: its own file and companion `.rules.ts` satisfy every rule below, and its `paths:` spans the whole bundle (`.md`, `.rules.ts`, tests), so the contract loads whichever piece an agent opens.
-3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are out of scope — owned by `GEN-003-frontmatter` and a future index ADR.
+3. Universal frontmatter (the cross-file semantics of `type`) and cross-harness INDEX routing are out of scope — this contract governs only the files under `.archgate/adrs/`.
 4. `.archgate/adrs/` is flat and fully governed: every non-hidden file MUST be a top-level `<PREFIX>-<NNN>-<slug>` `.md`, `.rules.ts`, or `.rules.test.ts`, and every rules or test file MUST have its backing `.md`. archgate discovers ADRs by frontmatter, not filename, so a misnamed or nested file may still act as governance while this contract cannot see it, and an ADR-less `.rules.ts` is silently inert. (📜 Rule: `adr-governed-files`)
 
 ### 2. Frontmatter contract (📜 Rule: `adr-frontmatter`)
 
 1. Keys `type`, `id`, `title`, `domain`, `rules` MUST be present and non-empty; `paths` is optional.
-2. Field order MUST be exactly `type → id → title → domain → rules → paths`; `type` leads because it is the universal field `GEN-003` owns. Additional keys (e.g. `description`) MAY follow `paths`.
+2. Field order MUST be exactly `type → id → title → domain → rules → paths`; `type` leads so a reader or a cheap scanner can identify the document kind from its first line — recognisability, not a parsing requirement (References). Additional keys (e.g. `description`) MAY follow `paths`.
 3. `type` MUST be `adr`.
 4. `id` MUST match the filename prefix — `GEN-001-adr.md` carries `id: GEN-001`.
 5. `domain` MUST be a registered archgate domain (built-in or `.archgate/config.json` custom).
@@ -44,7 +44,7 @@ Every ADR MUST carry all six canonical H2 headings — exact text, presence-only
 ### 4. Claude Code rules symlink (📜 Rule: `adr-claude-rules-symlink`)
 
 1. An ADR declaring a non-empty `paths:` MUST have a companion **symlink** at `.claude/rules/<basename-lowercased>.md` resolving to it — e.g. `.claude/rules/gen-001-adr.md → ../../.archgate/adrs/GEN-001-adr.md`. This is the runtime layer: Claude Code loads the symlinked ADR into context on Read of any file matching the ADR's `paths:`, ahead of archgate's commit/push backstop (§4.6).
-2. The runtime entry MUST be a symlink (a pointer), never a copied body that would silently go stale. The check reads the symlink-not-copy signal from archgate's non-following file reader — a fragile behavioral dependency detailed in Consequences.
+2. The runtime entry MUST be a symlink (a pointer), never a copied body that would silently go stale. archgate's file reader resolves a symlink to its target, so a copy and a pointer are indistinguishable to the rule: this item is an authoring and review duty, and what the rule asserts is presence at the expected name plus the absence of orphans (Consequences).
 3. An ADR with empty or absent `paths:` MUST NOT have such a symlink — it governs nothing at runtime.
 4. Every ADR-named symlink under `.claude/rules/` (basename `<prefix>-<nnn>-<slug>.md`) MUST have a backing ADR with a non-empty `paths:`; orphaned symlinks are a violation. Hand-written, non-ADR-named rule files are left untouched.
 5. `paths:` is the single source of scope — it documents the ADR's governance surface and triggers Claude Code loading. Always-on scope is `paths: ["**/*"]` (a glob matching every Read); the no-`paths` launch-load mode is deliberately unused, so every symlinked ADR declares its scope.
@@ -82,7 +82,7 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 2. **DO** emit all six canonical H2 sections; presence-only, empty bodies pass the linter but not review. (Decision 3, 📜 Rule: `adr-required-sections`)
 3. **DO** give every ADR that declares a non-empty `paths:` a `.claude/rules/<basename-lowercased>.md` symlink pointing back to it. (Decision 4, 📜 Rule: `adr-claude-rules-symlink`)
 4. **DO** express always-on scope as `paths: ["**/*"]` rather than omitting `paths`.
-5. **DO** keep the runtime entry a symlink (a pointer), never a copied body.
+5. **DO** keep the runtime entry a symlink (a pointer), never a copied body — no rule can see the difference, so this one holds only if you hold it. (Decision 4)
 6. **DO** number Decision anchors `### N.` from 1 and keep each anchor's first-level items a sequential ordered list. (Decision 5, 📜 Rule: `adr-numbered-decision`)
 7. **DO** head the blocks with `### Do's` then `### Don'ts` and write each as an ordered list restarting at 1, every item keeping its `**DO**` / `**DON'T**` prefix. (Decision 5, 📜 Rule: `adr-numbered-dos-donts`)
 8. **DO** anchor every companion rule to prose on both sides — a Decision-side marker on the deciding anchor and a back-referencing Do's/Don'ts marker naming that anchor. (Decision 5, 📜 Rule: `adr-rule-mentions`)
@@ -97,7 +97,7 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 
 ### Don'ts
 
-1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter is GEN-003's, INDEX routing is the index ADR's.
+1. **DON'T** widen this contract's scope beyond `.archgate/adrs/` — universal frontmatter and INDEX routing are out of scope, wherever they are owned.
 2. **DON'T** leave a `.claude/rules` ADR entry behind when its backing ADR is deleted or drops its `paths:` — remove the symlink in the same change.
 3. **DON'T** flip the enforcement tier or add new rules outside an explicit ADR amendment.
 4. **DON'T** author `paths:` as a YAML block-style list — inline flow form only. (Decision 2, 📜 Rule: `adr-paths-inline`)
@@ -120,14 +120,14 @@ An ADR loads into agent context as a `.claude/rules` runtime rule (§4), so ever
 **Negative:**
 
 1. **Symlink upkeep:** one `.claude/rules` symlink per scoped ADR is extra surface to keep in sync — mitigated: `adr-claude-rules-symlink` fails on drift.
-2. **Inverting behavioral dependency:** the symlink-not-copy check rides on archgate's file reader rejecting symlinks — not a semver-guaranteed contract, and the binary is a shared global cache (`~/.archgate/bin`), not a per-repo pin. If a release starts following symlinks the check inverts — every valid symlink reads as a forbidden copy, blocking all commits, while orphan detection goes silent — and only a real `archgate check` surfaces it, since the unit tests mock the non-following reader. Recovery: pin or roll back the binary, or amend this rule and fall back to the copy-body generator (Context).
+2. **Sync, not pointer-ness:** the reader resolves symlinks, so §4.2 is unenforceable and this contract promises the weaker pair it can still check — a runtime entry present at the expected name, and no orphan. A copied body that matches its ADR byte-for-byte is invisible, surfacing only once the two drift; `src/run.test.ts` holds the one real `lstat` check, and it proves the CLI writes symlinks, not that the committed tree still has them. Reader behaviour is not a semver-guaranteed contract, and the binary is a shared global cache (`~/.archgate/bin`) that ignores the declared range, so `ARCHGATE_VERSION` governs cold installs alone.
 3. **Regex meta-parsing:** the meta-rules parse YAML and TypeScript with regexes, so quoted kebab-case rule keys and inline `paths:` are load-bearing conventions; AST hardening is tracked in [#7](https://github.com/hancrafted/typescript-ai-harness/issues/7).
 4. **Authoring ceremony:** the contract's full rule set — numbered anchors, subsection headings, twin markers, a sibling rules-test, provenance tags — is more to satisfy than plain prose. Mitigated: the `adr-author` skill encodes the shape, this ADR auto-loads on any ADR Read, and each rule's message names the fix.
 5. **Target correctness unverified:** the symlink rule proves a symlink exists at the expected name, not that it resolves to its own ADR — a mispointed or dangling link passes and silently loads wrong or no context. The rule API cannot readlink; alignment is a manual review duty, tracked in [#9](https://github.com/hancrafted/typescript-ai-harness/issues/9).
 
 **Risks:**
 
-1. **Platform symlink support:** on Windows, symlinks need Administrator or Developer Mode, and default git (`core.symlinks=false`) checks existing runtime entries out as plain files — which read as forbidden copies and fail `archgate check` on a fresh clone. A Windows contributor is blocked until symlinks are enabled (Developer Mode + `git config core.symlinks true`, then re-checkout); the copy-body generator (Context) is the escalation path.
+1. **Platform symlink support:** on Windows, symlinks need Administrator or Developer Mode, and default git (`core.symlinks=false`) checks existing runtime entries out as plain files. Those plain files satisfy the presence check, so a fresh clone passes `archgate check` while every runtime entry is a frozen copy — silent staleness rather than a blocked build, which is the worse failure of the two. Enabling symlinks (Developer Mode + `git config core.symlinks true`, then re-checkout) is the fix; the copy-body generator (Context) is the escalation path.
 2. **Loader drift:** `.claude/rules` is a versioned Claude Code feature; if it regresses, pivot to the generator fallback (Context) with zero ADR renames.
 
 ## Compliance and Enforcement
@@ -146,4 +146,5 @@ Automated: `GEN-001-adr.rules.ts` runs every companion rule at `error` (§7), sc
 
 - [Claude Code — memory & `.claude/rules` path-scoped rules](https://code.claude.com/docs/en/memory#organize-rules-with-claude/rules/) — the runtime loading mechanism §4 relies on (`paths:` field, glob matching, symlink support).
 - [archgate](https://archgate.dev/) — ADR authoring path and the deterministic rule model.
+- [JAR File Specification — notes on the manifest](https://docs.oracle.com/en/java/javase/21/docs/specs/jar/jar.html) — the documented precedent for §2.2's shape: `Manifest-Version` must lead "so that they can be recognized easily as magic strings", and "other than that, the order of attributes within a main section is not significant". A one-key ordered prefix, a free tail, and recognisability as the stated reason.
 - Deferred hardening: [#7 AST-harden the meta-parsers](https://github.com/hancrafted/typescript-ai-harness/issues/7), [#8 contract evolution mechanism](https://github.com/hancrafted/typescript-ai-harness/issues/8), [#9 script ADR + toolchain guardrails](https://github.com/hancrafted/typescript-ai-harness/issues/9).
