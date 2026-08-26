@@ -41,14 +41,20 @@ The release commit bumps `package.json` **and** `.typescript-ai-harness.json` to
 ```bash
 npm version patch --no-git-tag-version   # bump package.json only; prints the new vX.Y.Z, no commit, no tag
 # set "version" in .typescript-ai-harness.json to that same X.Y.Z
-git commit -am "chore(release): X.Y.Z"   # one commit: package.json + package-lock.json + .typescript-ai-harness.json
-git tag vX.Y.Z
+# commit package.json + package-lock.json + .typescript-ai-harness.json with the `commit` skill
+git tag -a vX.Y.Z -m "vX.Y.Z"            # annotated — a bare `git tag vX.Y.Z` never leaves the machine
 git push --follow-tags                   # pushes commit AND tag -> triggers Publish
+git ls-remote --tags origin | grep vX.Y.Z   # prove the tag landed; no tag, no publish
 ```
+
+This step has two silent failure modes, both observed in a real release:
+
+- **`git push --follow-tags` pushes annotated tags only.** A lightweight tag — `git tag vX.Y.Z`, no `-a` — is skipped without a word: the push prints `main -> main`, exits `0`, and Publish never fires. The release looks finished and nothing reached npm. That is what the `-a` and the `ls-remote` line above are for; do not treat a clean push as proof.
+- **The commit-msg hook rejects a bare `git commit -m "chore(release): X.Y.Z"`.** It requires a Keep a Changelog `### <category>` section carrying at least one numbered item, plus a `Source:` trailer. Use the `commit` skill, which writes a conforming message and runs the gate before committing.
 
 `HARNESS_VERSION` is read from `package.json` (`src/harness-config.ts`), so those two files are the whole version change.
 
-**Done when:** the `vX.Y.Z` tag is pushed to the remote.
+**Done when:** `git ls-remote --tags origin` lists the `vX.Y.Z` tag.
 
 ## 5. Watch Publish
 

@@ -8,10 +8,14 @@ there is no npm token to manage. Canonical decision record: **ADR-0009**.
 
 ## TL;DR
 
+> **Superseded — do not run this.** `SKILL.md` step 4 is the current flow. `npm version` bumps
+> `package.json` alone, and a commit that leaves `.typescript-ai-harness.json` behind is rejected by
+> pre-commit `archgate check` (GEN-002 §1.4). The two files must move together, by hand, in one
+> commit; only the pipeline description below still applies.
+
 ```bash
 git checkout main && git pull            # be on an up-to-date main
-npm version <patch|minor|major>          # bumps package.json + creates the vX.Y.Z tag
-git push --follow-tags                   # pushes the commit and the tag -> triggers Publish
+# then follow SKILL.md step 4: bump both files, commit, annotated tag, push
 ```
 
 Then watch the **Publish** workflow in the Actions tab go green.
@@ -64,9 +68,13 @@ Before cutting a release, from an up-to-date `main`:
 
 ## Cut the release
 
+> **Superseded by `SKILL.md` step 4**, which bumps `package.json` and
+> `.typescript-ai-harness.json` in one hand-made commit and tags with `git tag -a`. `--follow-tags`
+> pushes annotated tags only, so a lightweight tag is silently dropped and nothing publishes.
+
 ```bash
-npm version <patch|minor|major>   # bumps package.json version, commits, tags vX.Y.Z
-git push --follow-tags            # pushes the commit AND the tag -> triggers Publish
+# see SKILL.md step 4 — bump both files, commit via the `commit` skill,
+# `git tag -a vX.Y.Z -m "vX.Y.Z"`, then `git push --follow-tags`
 ```
 
 Notes:
