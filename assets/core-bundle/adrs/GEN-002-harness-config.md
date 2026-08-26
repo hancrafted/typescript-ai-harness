@@ -52,11 +52,11 @@ Rejected alternatives:
     1. **Namespace typo guard:** every **present** `namespace.block` key MUST match a fence-declared path — `markdown.frontmater` errors.
     2. **Optional presence:** a declared path **absent** from the config is fine — the owner's built-in default applies, so presence is never required.
     3. **Depth guard:** a block is a `ConfigBlock` exactly two key levels deep — a third nesting level errors.
-    4. **Cross-field invariants:** a `coverage` FileSet is present *iff* `unmatched` is `'error'` (both directions), and an `exempt` entry carries neither `rule` nor `severity`. The per-field defaults and shapes those keys carry — along with the opaque `settings`/`rule` payloads — live at their declaration in the core types above, not restated here.
+    4. **Cross-field invariants:** a `coverage` FileSet is present *iff* `unmatched` is `'error'` (both directions); an `exempt` entry carries neither `rule` nor `severity`; and a FileSet's `excludeFiles` — literal file paths, no wildcards — is present only when its `include` carries a wildcard: a wildcard-free include names one file, so carving from it is contradictory, and the fix is to drop `excludeFiles` or widen the include. The per-field defaults and shapes those keys carry — along with the opaque `settings`/`rule` payloads — live at their declaration in the core types above, not restated here.
 2. **Evaluation grammar** (declared here, executed by block owners):
-    1. **Entry files:** An entry's files are `glob(include) − glob(exclude)`.
+    1. **Entry files:** An entry's files are `glob(include) − excludeFiles` (the listed literal paths).
     2. **First-match-wins:** The **ordered** `pathRules` array is evaluated first-match-wins — the first entry whose FileSet contains a file *claims* it.
-    3. **Three-way carve-outs:** An **exempt** entry claims and waives; an entry **exclude** means *not claimed* (the file falls through to later entries, then to `unmatched`); a **coverage exclude** removes the file from the governed universe entirely.
+    3. **Three-way carve-outs:** An **exempt** entry claims and waives; an entry **`excludeFiles`** path means *not claimed* (the file falls through to later entries, then to `unmatched`); a **coverage `excludeFiles`** path removes the file from the governed universe entirely.
 3. **Coverage posture:** Under `unmatched: 'error'`, the block owner reports every file in `coverage` that no entry claims, at the error tier — the strict posture where an unlisted file is a mistake. Under `unmatched: 'exempt'`, posture stays emergent — govern what you list, everything else is exempt.
 4. **Consumer contract (all-or-nothing):**
     1. **Absent → default:** Config file absent, or a healthy file without the block → the block's built-in default.
@@ -76,7 +76,7 @@ Rejected alternatives:
 2. **DO** stamp `version` with the seeding release and restamp it only through the migrate step. (Decision 1, 📜 Rule: `config-version`)
 3. **DO** register a block with one fence plus an owning ADR — never by editing this contract. (Decision 2, 📜 Rule: `config-extension-fenced`)
 4. **DO** keep the config two levels deep, every present block fence-declared and spine-valid. (Decision 3, 📜 Rule: `config-shape-valid`)
-5. **DO** pick the right carve-out: `exempt` (claim-and-waive), entry `exclude` (fall through), `coverage` exclude (leave the strict universe).
+5. **DO** pick the right carve-out: `exempt` (claim-and-waive), entry `excludeFiles` (fall through), `coverage` `excludeFiles` (leave the strict universe).
 6. **DO** honor the all-or-nothing contract: absent → default; broken → govern nothing.
 
 ### Don'ts
@@ -87,6 +87,7 @@ Rejected alternatives:
 4. **DON'T** best-effort-skip invalid pieces of a block — a block that fails validation governs nothing.
 5. **DON'T** add hand-authored types to `rules.d.ts`, edit another ADR's fence, or park block types outside every fence.
 6. **DON'T** park project-local governance at an undeclared key — give it its own fence and ADR.
+7. **DON'T** pair `excludeFiles` with a wildcard-free `include` — a literal-path include already names its one file, so the carve-out contradicts it; drop `excludeFiles` or widen the include. (Decision 3)
 
 ## Consequences
 
