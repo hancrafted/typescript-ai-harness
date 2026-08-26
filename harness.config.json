@@ -7,5 +7,5 @@
     "frontmatter-config.md",
     "rules.d.ts"
   ],
-  "ARCHGATE_VERSION": "^0.50.0"
+  "ARCHGATE_VERSION": "^0.55.0"
 }

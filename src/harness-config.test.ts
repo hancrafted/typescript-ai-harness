@@ -80,8 +80,16 @@ describe('harness.config.json — the baked build config', () => {
     ]);
   });
 
-  it('pins the archgate version, unchanged from the retired template.ts constant', () => {
-    expect(ARCHGATE_VERSION).toBe('^0.50.0');
+  it('pins the archgate version to the release that generated the committed rules.d.ts', () => {
+    // Load-bearing, and not obviously so. `archgate check` regenerates
+    // .archgate/rules.d.ts from the running binary's own type surface, and
+    // `npm run capture` mirrors it into assets/core-bundle/. CI installs on a
+    // cold cache, so this range decides which binary regenerates the file
+    // there — and npm's caret pins the minor for 0.x, making `^0.55.0` mean
+    // >=0.55.0 <0.56.0. Let this drift below the version that generated the
+    // committed rules.d.ts and CI's capture-freshness guard goes red on a file
+    // nobody edited.
+    expect(ARCHGATE_VERSION).toBe('^0.55.0');
   });
 
   it('exposes the harness release version from package.json (the seed stamp source)', () => {
