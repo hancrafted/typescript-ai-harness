@@ -11,7 +11,6 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HARNESS_VERSION } from './harness-config';
 import { run } from './run';
 import type { Answers, Exec } from './types';
 
@@ -310,22 +309,9 @@ describe.each([
     expect(read('.prettierignore')).toContain('.archgate/rules.d.ts');
   });
 
-  it('seeds .typescript-ai-harness.json from GEN-003 default frontmatter + a version stamp', async () => {
+  it('writes no .typescript-ai-harness.json — the config it configured no longer ships', async () => {
     await run(FULL, { cwd, exec, yes });
-
-    const harnessConfig = JSON.parse(read('.typescript-ai-harness.json'));
-    // Stamped with the harness release (GEN-002 §1.4), not the target's version.
-    expect(harnessConfig.version).toBe(HARNESS_VERSION);
-    // The materialised block is GEN-003's built-in default, verbatim: unmatched
-    // exempt + the four root-or-specific entries, so seeding is a behaviour no-op.
-    const block = harnessConfig.markdown.frontmatter;
-    expect(block.unmatched).toBe('exempt');
-    expect(block.pathRules.flatMap((entry: { include: string[] }) => entry.include)).toEqual([
-      '.archgate/adrs/*.md',
-      'README.md',
-      'AGENTS.md',
-      'CLAUDE.md',
-    ]);
+    expect(has('.typescript-ai-harness.json')).toBe(false);
   });
 
   it('retires the empty adrs/.gitkeep — the dir now holds real, governed ADRs', async () => {
@@ -352,13 +338,14 @@ describe('run — dry run', () => {
   it('reports the plan but writes nothing and runs no command', async () => {
     const { actions } = await run(FULL, { cwd, exec, dryRun: true, yes: true });
     expect(actions.length).toBeGreaterThan(0);
-    // The seed action IS in the previewed plan (dry-run *previews* it) …
-    expect(actions.some((a) => a.kind === 'writeFile' && a.path === '.typescript-ai-harness.json')).toBe(true);
+    // The seed action is gone from the plan itself, not merely unwritten — a
+    // dry run previews every writeFile, so this would still be true if the
+    // action survived and only the disk write were suppressed.
+    expect(actions.some((a) => a.kind === 'writeFile' && a.path === '.typescript-ai-harness.json')).toBe(false);
     expect(has('package.json')).toBe(false);
     expect(has('eslint.config.mjs')).toBe(false);
     expect(has('.archgate/config.json')).toBe(false);
-    expect(has('.claude/settings.local.json')).toBe(false);
-    expect(has('.typescript-ai-harness.json')).toBe(false); // … but nothing is written to disk
+    expect(has('.claude/settings.local.json')).toBe(false); // … and nothing is written to disk
     expect(calls).toHaveLength(0);
   });
 });
@@ -389,18 +376,15 @@ describe('run — idempotency', () => {
     // The Target project grows its governance workspace after scaffolding.
     const cfg = JSON.stringify({ domains: { ARCH: { adrs: ['ARCH-001'] } }, baseBranch: 'origin/develop' }, null, 2);
     const settings = JSON.stringify({ agent: 'my-own-agent' }, null, 2);
-    const harnessCfg = JSON.stringify({ version: '9.9.9', markdown: {} }, null, 2);
     writeFileSync(join(cwd, '.archgate/config.json'), cfg);
     writeFileSync(join(cwd, '.claude/settings.local.json'), settings);
-    writeFileSync(join(cwd, '.typescript-ai-harness.json'), harnessCfg);
     // A hand-edit to a Tool-owned bundle file, to prove the contrast: the seed
     // is left alone while the bundle IS overwritten on the same re-run.
     writeFileSync(join(cwd, '.archgate/adrs/GEN-001-adr.md'), 'CLOBBERED');
 
     await run(FULL, { cwd, exec, yes: true });
     expect(read('.archgate/config.json')).toBe(cfg); // never clobbered
-    expect(read('.claude/settings.local.json')).toBe(settings);
-    expect(read('.typescript-ai-harness.json')).toBe(harnessCfg); // Seeded: write-once
+    expect(read('.claude/settings.local.json')).toBe(settings); // Seeded: write-once
     expect(read('.archgate/adrs/GEN-001-adr.md')).not.toBe('CLOBBERED'); // Tool-owned: overwritten
   });
 });

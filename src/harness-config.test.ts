@@ -87,9 +87,10 @@ describe('harness.config.json — the baked build config', () => {
     expect(ARCHGATE_VERSION).toBe('^0.55.0');
   });
 
-  it('exposes the harness release version from package.json (the seed stamp source)', () => {
-    // The seed stamps HARNESS_VERSION into .typescript-ai-harness.json; it must
-    // track package.json (npm's source of truth), never a hand-copied literal.
+  it('exposes the harness release version from package.json', () => {
+    // Test-only since the harness-config seed was dropped, and kept deliberately:
+    // it must track package.json (npm's source of truth), never a hand-copied
+    // literal, so it is still correct whenever it regains a consumer.
     const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
     expect(HARNESS_VERSION).toBe(pkg.version);
   });

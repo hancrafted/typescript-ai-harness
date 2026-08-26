@@ -3,11 +3,14 @@ import { version } from '../package.json';
 
 /**
  * The harness's own release version, read from its `package.json` and baked
- * into the bundle at build (tsup inlines JSON). This is the value the CLI
- * stamps into a seeded `.typescript-ai-harness.json`: the config's `version`
- * names the installed harness release, never the Target's own version.
- * `package.json` is the single source of truth for it (npm owns that field);
- * `harness.config.json` deliberately does not duplicate it.
+ * into the bundle at build (tsup inlines JSON). `package.json` is the single
+ * source of truth for it (npm owns that field); `harness.config.json`
+ * deliberately does not duplicate it.
+ *
+ * Currently **no production consumer** — the seed that stamped it into a
+ * Target's `.typescript-ai-harness.json` is gone with the frontmatter ADRs. The
+ * export and its `package.json` pin survive on purpose rather than by oversight;
+ * whatever stamps a Target next will need exactly this value.
  */
 export const HARNESS_VERSION: string = version;
 

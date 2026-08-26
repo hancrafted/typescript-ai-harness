@@ -1,4 +1,4 @@
-import { ARCHGATE_VERSION, HARNESS_VERSION } from '../../harness-config';
+import { ARCHGATE_VERSION } from '../../harness-config';
 
 /**
  * The `archgate init --editor claude` snapshot, captured against the pinned
@@ -49,80 +49,6 @@ export const claudeSettingsLocal = (): string =>
     null,
     2,
   )}\n`;
-
-/**
- * The CLI's own copy of GEN-003's built-in default `markdown.frontmatter`
- * block — the four root-or-specific entries the Frontmatter Contract applies
- * when no config file is present. Seeding writes exactly this, so the seed is a
- * **behaviour no-op**: it materialises the policy GEN-003 already enforces by
- * default (ADR-0010 §6). GEN-003's rules.ts hardcodes the same block and cannot
- * import it (archgate rules share no runtime code), so this is a deliberate
- * second copy, kept honest by a shared-fixture test: both this copy and
- * GEN-003's are pinned to `DEFAULT_FRONTMATTER` in `harness-config-fixtures.ts`,
- * so a drift in either fails. Carries NONE of this repo's project-specific
- * entries (`docs/adr`, `docs/agents`, `.claude/agents`, `CONTEXT.md` — the #14
- * disambiguation, kept out of core).
- */
-export const SEED_FRONTMATTER = {
-  unmatched: 'exempt',
-  pathRules: [
-    { include: ['.archgate/adrs/*.md'], rule: { allowedTypes: ['adr'], label: 'title' } },
-    { include: ['README.md'], rule: { allowedTypes: ['docs'], label: 'title' } },
-    { include: ['AGENTS.md'], rule: { allowedTypes: ['agents-md'], label: 'title' } },
-    { include: ['CLAUDE.md'], rule: { allowedTypes: ['claude-md'], label: 'title' } },
-  ],
-};
-
-/**
- * Render a JSON value on a single line in prettier's style — a space inside
- * object braces, none inside array brackets, `", "` between entries — used to
- * collapse each seeded `pathRules` entry onto one readable line (see
- * {@link harnessConfigSeed}). Kept minimal: it prints only the small, closed
- * frontmatter shapes GEN-003 defines, not arbitrary nesting.
- */
-const inlineJson = (value: unknown): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(inlineJson).join(', ')}]`;
-  }
-  if (value !== null && typeof value === 'object') {
-    const body = Object.entries(value)
-      .map(([key, val]) => `${JSON.stringify(key)}: ${inlineJson(val)}`)
-      .join(', ');
-    return `{ ${body} }`;
-  }
-  return JSON.stringify(value);
-};
-
-/**
- * Seeded `.typescript-ai-harness.json` (GEN-002 §1): the config envelope
- * stamping the harness release `version` over GEN-003's default frontmatter
- * block. A **Seeded** config file — written once, never patched on re-run; an
- * upgrade is the explicit migrate engine (#68), never a silent rewrite. The
- * stamp records which harness release wrote the config; GEN-002's `config-version`
- * equality-checks it only where `package.json` names the harness itself, so a
- * foreign Target carries the stamp without a mismatch.
- *
- * Two-space JSON with a trailing newline, but each `pathRules` entry is
- * collapsed onto one line (they fit well within prettier's 120 print width) so
- * the rule list reads as a compact table rather than sprawling over ~50 lines.
- * The output is a prettier fixpoint (asserted in `seed.test.ts`), so a
- * self-applied config round-trips with a clean diff.
- */
-export const harnessConfigSeed = (): string => {
-  const pathRules = SEED_FRONTMATTER.pathRules.map((entry) => `        ${inlineJson(entry)}`).join(',\n');
-  return `{
-  "version": ${JSON.stringify(HARNESS_VERSION)},
-  "markdown": {
-    "frontmatter": {
-      "unmatched": ${JSON.stringify(SEED_FRONTMATTER.unmatched)},
-      "pathRules": [
-${pathRules}
-      ]
-    }
-  }
-}
-`;
-};
 
 /**
  * Append-only `.prettierignore` entry for archgate's generated `rules.d.ts`. The
