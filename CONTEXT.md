@@ -86,6 +86,10 @@ _Avoid_: match (retired name), glob (the FileSet holds globs; it isn't one)
 The block-owned policy object inside a governed pathRules entry — for the frontmatter block: `allowedTypes`, `label`, `requireDescription`, and the caps. Opaque to GEN-002's Spine; schema owned by the block ADR (GEN-003). Deliberately overloaded with an archgate *executable rule* (`*.rules.ts`) — qualify as "rule payload" vs "archgate rule" when ambiguity bites.
 _Avoid_: policy, options (reserved), config (too broad)
 
+**Field policy**:
+The harness's own answer to *how strictly* one governed frontmatter field is enforced — which checks apply to it, and at what severity. Distinct from the field itself: OKF fixes whether a field exists and whether it is required, while the field policy is set here, per pathRules entry, from config. A policy may narrow what OKF allows, never widen it.
+_Avoid_: field rule (that names the archgate rule, not the policy), strictness mode
+
 **Design ADR**:
 A prose decision record under `docs/adr/` (`type: design-adr`) authored via the Matt-Pocock `/domain-modeling` skill — the lightweight *why*. Distinct from a Governance ADR; the two coexist and are disambiguated by `type`, never by prose.
 _Avoid_: ADR (ambiguous — always qualify design vs governance)

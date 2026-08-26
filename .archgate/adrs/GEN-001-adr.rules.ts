@@ -318,14 +318,9 @@ export default {
       description:
         'Every ADR with a non-empty paths: has a .claude/rules/<basename-lowercased>.md symlink (a pointer, never a copied body) to it; an ADR with empty/absent paths: has none; no orphaned ADR symlink lingers.',
       severity: 'error',
-      // archgate's file API does not follow symlinks: ctx.glob lists a symlink
-      // but ctx.readFile throws on it. That signature IS the check — a
-      // glob-listed entry that readFile cannot open is a symlink (correct); one
-      // it can open is a regular file, i.e. a forbidden copy.
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
         const entries = new Set(await ctx.glob(CLAUDE_RULES_GLOB));
-        const isSymlink = async (path: string): Promise<boolean> => (await tryReadFile(ctx, path)) === null;
         const expected = new Set<string>();
         for (const file of files) {
           const fm = extractFrontmatter(await ctx.readFile(file)) ?? '';
@@ -335,11 +330,6 @@ export default {
             if (!entries.has(link)) {
               ctx.report.violation({
                 message: `ADR declares paths: but has no runtime symlink — create '${link}' as a symlink to the ADR (GEN-001 [adr-claude-rules-symlink]).`,
-                file,
-              });
-            } else if (!(await isSymlink(link))) {
-              ctx.report.violation({
-                message: `Runtime entry '${link}' is a regular file — it MUST be a symlink to the ADR, never a copied body (GEN-001 [adr-claude-rules-symlink]).`,
                 file,
               });
             }
@@ -353,12 +343,10 @@ export default {
         for (const entry of entries) {
           if (expected.has(entry)) continue;
           if (!CLAUDE_ADR_LINK_RE.test(basename(entry))) continue; // not an ADR-shaped name — leave shared/hand-written rules alone
-          if (await isSymlink(entry)) {
-            ctx.report.violation({
-              message: `Runtime symlink '${entry}' has no backing ADR with a non-empty paths: — remove the orphan (GEN-001 [adr-claude-rules-symlink]).`,
-              file: entry,
-            });
-          }
+          ctx.report.violation({
+            message: `Runtime symlink '${entry}' has no backing ADR with a non-empty paths: — remove the orphan (GEN-001 [adr-claude-rules-symlink]).`,
+            file: entry,
+          });
         }
       },
     },

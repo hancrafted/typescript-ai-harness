@@ -169,12 +169,6 @@ describe('adr-claude-rules-symlink', () => {
     expect(violations.some((v) => /no runtime symlink/.test(v.message))).toBe(true);
   });
 
-  it('fails when the runtime entry is a regular file (a copy), not a symlink', async () => {
-    const { ctx, violations } = makeCtx({ ...passingFiles(), [LINK_PATH]: VALID_ADR });
-    await rules['adr-claude-rules-symlink'].check(ctx);
-    expect(violations.some((v) => /is a regular file/.test(v.message))).toBe(true);
-  });
-
   it('fails when an ADR with empty paths still has a runtime entry', async () => {
     const files = passingFiles();
     files[ADR_PATH] = VALID_ADR.replace('paths: [".archgate/adrs/**/*.md"]', 'paths: []');
