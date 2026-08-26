@@ -29,7 +29,7 @@ import type { Exec } from '../src/types';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const ARCHGATE = join(REPO, 'node_modules', '.bin', 'archgate');
-const CORE_LINKS = ['gen-001-adr.md', 'gen-002-harness-config.md', 'gen-003-frontmatter.md'];
+const CORE_LINKS = ['gen-001-adr.md'];
 
 // Real git, no-op everything else — see the header.
 const exec: Exec = async (command, args, { cwd }) => {

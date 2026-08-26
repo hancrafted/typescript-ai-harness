@@ -64,20 +64,15 @@ describe('parseHarnessConfig — rejects malformed input', () => {
 
 describe('harness.config.json — the baked build config', () => {
   it('names the core ADR membership, ordered and explicit', () => {
-    expect(ADR_CORE).toEqual(['GEN-001', 'GEN-002', 'GEN-003']);
+    expect(ADR_CORE).toEqual(['GEN-001']);
   });
 
   it('lists exactly the .archgate/-relative supporting files that exist today', () => {
-    // frontmatter-config.md (the harness-config how-to) and the @generated
-    // rules.d.ts now ship as supporting files — both live under .archgate/ and
-    // are captured after the ADR trios (see bundle.readBundleLayout order).
-    expect(supportingFiles).toEqual([
-      'harness-config-core.d.ts',
-      'harness-config-extension.d.ts',
-      'harness-config-fixtures.ts',
-      'frontmatter-config.md',
-      'rules.d.ts',
-    ]);
+    // Only the @generated rules.d.ts, which GEN-001 needs to type-check a
+    // Target's own ADR .rules.ts. The four the frontmatter ADRs needed are not
+    // shipped: they still govern this repo, so they live under .archgate/ and
+    // stay out of the bundle.
+    expect(supportingFiles).toEqual(['rules.d.ts']);
   });
 
   it('pins the archgate version to the release that generated the committed rules.d.ts', () => {

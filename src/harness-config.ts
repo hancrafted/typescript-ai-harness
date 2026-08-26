@@ -4,11 +4,10 @@ import { version } from '../package.json';
 /**
  * The harness's own release version, read from its `package.json` and baked
  * into the bundle at build (tsup inlines JSON). This is the value the CLI
- * stamps into a seeded `.typescript-ai-harness.json` — GEN-002 §1.4 requires
- * the config's `version` to equal the installed harness release, so the stamp
- * is the harness release, never the Target's own version. `package.json` is the
- * single source of truth for it (npm owns that field); `harness.config.json`
- * deliberately does not duplicate it.
+ * stamps into a seeded `.typescript-ai-harness.json`: the config's `version`
+ * names the installed harness release, never the Target's own version.
+ * `package.json` is the single source of truth for it (npm owns that field);
+ * `harness.config.json` deliberately does not duplicate it.
  */
 export const HARNESS_VERSION: string = version;
 
@@ -21,24 +20,23 @@ export const HARNESS_VERSION: string = version;
  * stays out of the published tarball.
  *
  * Distinct from `.archgate/config.json` (archgate's own runtime config) and
- * `.typescript-ai-harness.json` (the Target-facing runtime config, GEN-002-owned).
+ * `.typescript-ai-harness.json` (the Target-facing runtime config).
  */
 export interface HarnessConfig {
   /**
-   * The explicit, ordered list of core ADR ids — `["GEN-001", "GEN-002",
-   * "GEN-003"]` today. Deliberately an explicit list, never a `GEN-*` glob, so
-   * a half-finished ADR cannot leak into a release (ADR-0010 §2).
+   * The explicit, ordered list of core ADR ids — `["GEN-001"]` today.
+   * Deliberately an explicit list, never a `GEN-*` glob, so a half-finished ADR
+   * cannot leak into a release (ADR-0010 §2).
    */
   ADR_CORE: string[];
   /**
    * The `.archgate/`-relative supporting files the bundle carries beyond the
-   * per-ADR trios: the two `harness-config-*.d.ts` (GEN-002/003 reference them),
-   * the shared fixtures both `.rules.test.ts` import (ADR-0010 §3, §7),
-   * `frontmatter-config.md` (the harness-config how-to, ADR-0010 §3), and the
-   * `@generated` `rules.d.ts` — archgate's ambient rule types, committed and
-   * seeded so a Target type-checks its own ADR `.rules.ts` before its first
-   * `archgate check` (which regenerates the same file byte-for-byte under the
-   * pinned version; ADR-0005 v5, ADR-0002).
+   * per-ADR trios. Only the `@generated` `rules.d.ts` today — archgate's ambient
+   * rule types, committed and seeded so a Target type-checks its own ADR
+   * `.rules.ts` before its first `archgate check`, which regenerates the same
+   * file byte-for-byte under the pinned version (ADR-0005 v5, ADR-0002). The
+   * files the two frontmatter ADRs needed are not shipped; they still govern
+   * this repo, so they stay under `.archgate/` and out of the bundle.
    */
   supportingFiles: string[];
   /**

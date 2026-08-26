@@ -237,13 +237,13 @@ describe('run — external commands', () => {
 // against one identical set of expectations. The bundle is copied from this repo's
 // committed assets/core-bundle asset (resolveBundleRoot always returns the asset,
 // #48) — kept byte-equal to canonical by the freshness guard — so the target ends
-// up with the real GEN-001/002/003 trios and .claude/rules symlinks, and each
+// up with the real GEN-001 trio and its .claude/rules symlink, and each
 // copyAsset.from points into the asset, not the live .archgate/.
 describe.each([
   { label: 'interactive (no --yes)', yes: false },
   { label: 'headless (--yes)', yes: true },
 ])('run — archgate v4 unified direct-write · $label', ({ yes }) => {
-  const CORE = ['GEN-001-adr', 'GEN-002-harness-config', 'GEN-003-frontmatter'];
+  const CORE = ['GEN-001-adr'];
 
   it('materialises each core ADR trio + supporting files under .archgate/, never invoking archgate init', async () => {
     await run(FULL, { cwd, exec, yes });
@@ -253,11 +253,24 @@ describe.each([
       expect(has(`.archgate/adrs/${id}.rules.ts`)).toBe(true);
       expect(has(`.archgate/adrs/${id}.rules.test.ts`)).toBe(true);
     }
-    expect(has('.archgate/harness-config-core.d.ts')).toBe(true);
-    expect(has('.archgate/harness-config-extension.d.ts')).toBe(true);
-    expect(has('.archgate/harness-config-fixtures.ts')).toBe(true);
-    expect(has('.archgate/frontmatter-config.md')).toBe(true);
     expect(has('.archgate/rules.d.ts')).toBe(true); // @generated types, seeded so the Target type-checks its own ADRs
+    // The shrink's negative control. GEN-002/GEN-003 and the four supporting
+    // files they needed still govern THIS repo, so they stay under .archgate/
+    // here — but they must not reach a Target. Every assertion above passes just
+    // as well if a stale copyAsset quietly puts one back, which is why the
+    // absences are asserted rather than left implied.
+    for (const id of ['GEN-002-harness-config', 'GEN-003-frontmatter']) {
+      expect(has(`.archgate/adrs/${id}.md`)).toBe(false);
+      expect(has(`.claude/rules/${id.toLowerCase()}.md`)).toBe(false);
+    }
+    for (const file of [
+      'harness-config-core.d.ts',
+      'harness-config-extension.d.ts',
+      'harness-config-fixtures.ts',
+      'frontmatter-config.md',
+    ]) {
+      expect(has(`.archgate/${file}`)).toBe(false);
+    }
     // Neither mode invokes `archgate init` or passes `--editor` (editor fixed to
     // claude). The only bare `init` shell-out is `git init` (archgate needs a
     // work tree), so match the archgate command specifically, not any `init` arg.
@@ -269,7 +282,7 @@ describe.each([
     await run(FULL, { cwd, exec, yes });
 
     const link = join(cwd, '.claude/rules/gen-001-adr.md');
-    expect(lstatSync(link).isSymbolicLink()).toBe(true); // a copy would invert archgate's rule
+    expect(lstatSync(link).isSymbolicLink()).toBe(true); // the only real symlink check left — archgate's reader resolves symlinks, so its rule cannot tell a copy from a pointer
     expect(readlinkSync(link)).toBe('../../.archgate/adrs/GEN-001-adr.md'); // relative, stored verbatim
     expect(readFileSync(link, 'utf8')).toBe(read('.archgate/adrs/GEN-001-adr.md')); // resolves through
     // Lowercased basename, matching how the symlink is created and what archgate's
