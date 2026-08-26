@@ -119,7 +119,7 @@ Running the tool again performs an **update from this repo as the single source 
 | `package.json` | **Surgically merged** — only the tool's scripts; everything else preserved |
 | `.gitignore`, `.prettierignore` | **Appended** (missing entries only); never overwritten |
 | `tsconfig.json` | Written **only if absent**; never overwritten |
-| `.archgate/*` | Created by `archgate init` (archgate owns it) |
+| `.archgate/*` | **Overwritten** with the Core governance bundle (see below); `.archgate/config.json` written **only if absent** |
 
 ### Scripts added to `package.json`
 
@@ -164,8 +164,11 @@ repo (so a staged change can never commit a red tree).
   directly through [tsx](https://www.npmjs.com/package/tsx) via the git-spec dev inner
   loop; only the _published_ `bin` points at the bundle.
 - **npm only.** pnpm / yarn / bun detection is not implemented.
-- **No ADRs are copied** by the archgate integration in this version — you start from a clean
-  governance baseline. `archgate init` may require you to be in a git repository.
+- **One ADR is copied** by the archgate integration: the Core governance bundle, which is
+  `GEN-001` (the ADR Contract) as `.md` + `.rules.ts` + `.rules.test.ts`, the `@generated`
+  `.archgate/rules.d.ts` so your own rule files type-check before the first `archgate check`,
+  and a `.claude/rules/gen-001-adr.md` symlink that loads the contract into agent context.
+  Frontmatter governance is **not** shipped in this version.
 - Deferred: an adaptation skill that fits the generic templates to a project's actual layout,
   and full Keep-a-Changelog commit-body validation.
 
