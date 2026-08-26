@@ -15,16 +15,13 @@ The core workflow
 4. repeat 1 until the next harness version is ready to be released
 5. release via v*.*.* tags on github, which will publish to npm @hancrafted/typescript-ai-harness 
 
-
-## Antigravity CLI
-<claude>Skip this section</claude>
-
-1. Read [Scarlet](.claude/agents/scarlet.md) and [Scarlet Memory](.claude/agent-memory/scarlet/MEMORY.md), this are your agent profile and memory. You are allowed to write memory but must append [by Gemini].
-2. Read [ADR INDEX](.archgate/INDEX.md), decide when you should load respetive ADR, when you read or write files matching it's `Trigger`.
-
 ## Rules
 
 1. Do not auto-include yourself in the commit message.
+2. Sessions with `/wayfinder` and `/grill-with-docs` or `grilling` skills should adhere to these formating rules
+   1. There can be a response to previous decision or a introduction section, but always formulate wh-question before the list of numbered options.
+   2. Provide Recommendation at the end and the reason why
+   3. Talk in ASD-STE100 Simplified Technical English, and use the ubiquitous language from `CONTEXT.md`. Use a inverted pyramid style to convey information.
 
 ## Commits
 

@@ -1,7 +1,7 @@
 ---
 type: agent-doc
 title: "Frontmatter configuration reference"
-description: "Option-by-option reference for the markdown.frontmatter block of .typescript-ai-harness.json: the envelope (top-level version, fence-declared blocks), the generic spine (FileSet include/exclude, pathRules, exempt, severity, unmatched, coverage), the frontmatter rule payload and settings, and the built-in default."
+description: "Option-by-option reference for the markdown.frontmatter block of .typescript-ai-harness.json: the envelope (top-level version, fence-declared blocks), the generic spine (FileSet include/excludeFiles, pathRules, exempt, severity, unmatched, coverage), the frontmatter rule payload and settings, and the built-in default."
 ---
 
 # Frontmatter configuration reference
@@ -33,20 +33,20 @@ The frontmatter floor (GEN-003) reads its policy from the `markdown.frontmatter`
 - Config file absent, or a healthy file without the `frontmatter` block → the **built-in default** (below) applies.
 - Block present → it **replaces** the default entirely — never merges. Re-declare every path you want governed.
 - Config present but unparseable, `version` missing or not matching the installed harness release, or the block invalid in any way → the block governs **nothing** until the loudly-reported errors are fixed (all-or-nothing; there is no best-effort mode).
-- An entry's files are `glob(include) − glob(exclude)`. Every markdown file is tested against `pathRules` in order; the **first** entry whose file set contains it **claims** it (first-match-wins). Later entries never see it.
+- An entry's files are `glob(include) − excludeFiles` (the listed literal paths). Every markdown file is tested against `pathRules` in order; the **first** entry whose file set contains it **claims** it (first-match-wins). Later entries never see it.
 - A file claimed by an `exempt` entry, or matching no entry at all, has no frontmatter requirements (with `unmatched: "exempt"`).
 
 ## Spine options — `markdown.frontmatter` (owned by GEN-002)
 
 - `pathRules` (array, required) — ordered list of entries, evaluated first-match-wins.
 - `unmatched` (string, optional: `"exempt"` | `"error"`, default `"exempt"`) — policy for files no entry claims. `"exempt"`: ungoverned. `"error"`: every unclaimed file inside `coverage` is a violation.
-- `coverage` (FileSet, required iff `unmatched` is `"error"`) — the governed universe for the strict posture: `{ "include": [...], "exclude": [...] }`.
+- `coverage` (FileSet, required iff `unmatched` is `"error"`) — the governed universe for the strict posture: `{ "include": [...], "excludeFiles": [...] }`. Its `excludeFiles` follows the same rule as an entry's: literal file paths only, allowed only when `include` carries a wildcard.
 - `settings` (object, optional) — block-level knobs owned by GEN-003, see below.
 
 ## Spine options — each `pathRules` entry (owned by GEN-002)
 
 - `include` (string[], required) — non-empty array of non-empty globs relative to the repo root, e.g. `["docs/adr/*.md"]`.
-- `exclude` (string[], optional) — files matched here are **not claimed** by this entry; they fall through to later entries (and ultimately to `unmatched`). Not an exemption.
+- `excludeFiles` (string[], optional) — **literal file paths** (no wildcards) listed here are **not claimed** by this entry; they fall through to later entries (and ultimately to `unmatched`). Not an exemption. Allowed **only when `include` carries a wildcard** (`*`, `?`, `[`, `{`): a literal-path include names one file, so carving from it is contradictory — `config-shape-valid` rejects it. A listed path found nowhere in the include set is a **dead carve-out** — `frontmatter-floor` reports it at warning tier so a typo does not pass silently.
 - `exempt` (boolean, default `false`) — `true` claims matched files and switches the whole floor **off** for them; such an entry must not carry `rule` or `severity`. Order it before broader governed entries to carve out exceptions.
 - `severity` (string, optional: `"error"` | `"warning"`, default `"error"`) — the tier this entry's violations emit at. `warning` reports without blocking — useful to ratchet a brownfield surface.
 - `rule` (object, optional) — the frontmatter policy payload, below. Absent = an open governed entry: the baseline floor applies.
@@ -56,8 +56,8 @@ The frontmatter floor (GEN-003) reads its policy from the `markdown.frontmatter`
 | Mechanism        | Claims the file? | Effect                                                                   |
 | ---------------- | ---------------- | ------------------------------------------------------------------------ |
 | `exempt: true`   | Yes              | Floor waived entirely; later entries never see the file                   |
-| entry `exclude`  | No               | Falls through to later entries, then to `unmatched`                       |
-| coverage exclude | —                | Outside the strict universe: never a coverage violation under `"error"`  |
+| entry `excludeFiles` | No | Falls through to later entries, then to `unmatched` |
+| coverage `excludeFiles` | — | Outside the strict universe: never a coverage violation under `"error"` |
 
 ## Payload options — `rule` (owned by GEN-003)
 
@@ -132,7 +132,7 @@ Strict coverage — every markdown file under `docs/` must be explicitly governe
   "markdown": {
     "frontmatter": {
       "unmatched": "error",
-      "coverage": { "include": ["docs/**/*.md"], "exclude": ["docs/vendor/**"] },
+      "coverage": { "include": ["docs/**/*.md"], "excludeFiles": ["docs/vendor/legacy.md"] },
       "pathRules": [
         { "include": ["docs/adr/*.md"], "rule": { "allowedTypes": ["design-adr"], "label": "title" } },
         { "include": ["docs/tmp/**"], "exempt": true }

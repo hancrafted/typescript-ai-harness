@@ -1,0 +1,19 @@
+# Managed by the `commit` skill — rewritten by `/commit --setup-husky`.
+# Edit the skill's contract, not this file.
+#
+# Delegates to the gate that ships inside the skill, so the enforced contract
+# and the documented contract cannot drift apart.
+root=$(git rev-parse --show-toplevel) || exit 1
+
+for gate in '.agents/skills/commit/scripts/commit-msg' 'skills/commit/scripts/commit-msg'; do
+  if [ -f "$root/$gate" ]; then
+    exec sh "$root/$gate" "$1"
+  fi
+done
+
+echo "✖ commit gate not found — the commit skill is not installed where this hook expects it." >&2
+echo "  looked for: .agents/skills/commit/scripts/commit-msg" >&2
+echo "         and: skills/commit/scripts/commit-msg" >&2
+echo "  install it with: npx skills add hancrafted/skills" >&2
+echo "  project scope, and never --copy — copy mode breaks the single canonical path." >&2
+exit 1

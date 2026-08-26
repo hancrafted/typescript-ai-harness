@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_VIOLATION_CONFIG,
+  EXCLUDE_FILES_LITERAL_INCLUDE_CONFIG,
   MOCK_HARNESS_VERSION,
   PAYLOAD_TYPO_CONFIG,
   RETIRED_KEY_CONFIG,
@@ -521,14 +522,45 @@ describe('config-shape-valid', () => {
     }
   });
 
-  it('fails an invalid exclude', async () => {
-    for (const exclude of [[], [1], 'x.md']) {
-      const { ctx, violations } = makeCtx({ config: entries([{ include: ['x.md'], exclude }]) });
+  it('fails an invalid excludeFiles (wrong shape or a wildcard)', async () => {
+    for (const excludeFiles of [[], [1], 'x.md', ['docs/*.md']]) {
+      const { ctx, violations } = makeCtx({ config: entries([{ include: ['docs/**/*.md'], excludeFiles }]) });
       await shapeValid.check(ctx);
       expect(
-        violations.some((v) => /exclude' must be a non-empty array of non-empty glob strings/.test(v.message)),
+        violations.some((v) =>
+          /excludeFiles' must be a non-empty array of non-empty literal file paths/.test(v.message),
+        ),
       ).toBe(true);
     }
+  });
+
+  it('fails excludeFiles paired with a wildcard-free include', async () => {
+    const { ctx, violations } = makeCtx({ config: EXCLUDE_FILES_LITERAL_INCLUDE_CONFIG });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /excludeFiles' is only meaningful when .* has a wildcard/.test(v.message))).toBe(
+      true,
+    );
+  });
+
+  it('accepts excludeFiles listing a literal file when the include carries a wildcard', async () => {
+    const { ctx, violations } = makeCtx({
+      config: entries([{ include: ['docs/**/*.md'], excludeFiles: ['docs/index.md'] }]),
+    });
+    await shapeValid.check(ctx);
+    expect(violations.some((v) => /excludeFiles/.test(v.message))).toBe(false);
+  });
+
+  it('fails a coverage excludeFiles paired with a wildcard-free include', async () => {
+    const { ctx, violations } = makeCtx({
+      config: entries([{ include: ['docs/**/*.md'] }], {
+        unmatched: 'error',
+        coverage: { include: ['README.md'], excludeFiles: ['README.md'] },
+      }),
+    });
+    await shapeValid.check(ctx);
+    expect(
+      violations.some((v) => /coverage\.excludeFiles' is only meaningful when .* has a wildcard/.test(v.message)),
+    ).toBe(true);
   });
 
   it('fails a non-boolean exempt', async () => {

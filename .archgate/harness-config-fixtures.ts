@@ -32,8 +32,8 @@ export const DEFAULT_FRONTMATTER: Harness.ConfigBlock<Harness.FrontmatterRule, H
 };
 
 /** Fully valid config exercising every spine feature: settings, an
- * entry-level exclude (fall-through), an exempt entry, a multi-glob include
- * with a warning tier, and an open governed entry (no `rule` payload).
+ * entry-level excludeFiles (fall-through), an exempt entry, a multi-glob
+ * include with a warning tier, and an open governed entry (no `rule` payload).
  * GEN-002: all four rules pass. GEN-003: frontmatter-config-valid passes and
  * the floor governs by it. */
 export const VALID_CONFIG: Harness.Config = {
@@ -45,7 +45,7 @@ export const VALID_CONFIG: Harness.Config = {
       pathRules: [
         {
           include: ['docs/adr/*.md'],
-          exclude: ['docs/adr/DRAFT-*.md'],
+          excludeFiles: ['docs/adr/DRAFT.md'],
           rule: { allowedTypes: ['design-adr'], label: 'title', requireDescription: true, maxTag: 40 },
         },
         { include: ['.claude/agents/*.md'], rule: { allowedTypes: ['agent'], label: 'name', maxDescription: 4096 } },
@@ -58,15 +58,15 @@ export const VALID_CONFIG: Harness.Config = {
 };
 
 /** The strict posture: unmatched 'error' with a coverage FileSet (its own
- * exclude carves files out of the governed universe entirely). GEN-002: all
- * four rules pass. GEN-003: the floor errors on every in-coverage file no
+ * excludeFiles carves files out of the governed universe entirely). GEN-002:
+ * all four rules pass. GEN-003: the floor errors on every in-coverage file no
  * entry claims. */
 export const STRICT_CONFIG: Harness.Config = {
   version: MOCK_HARNESS_VERSION,
   markdown: {
     frontmatter: {
       unmatched: 'error',
-      coverage: { include: ['docs/**/*.md'], exclude: ['docs/legacy/**'] },
+      coverage: { include: ['docs/**/*.md'], excludeFiles: ['docs/legacy/old.md'] },
       pathRules: [
         { include: ['docs/adr/*.md'], rule: { allowedTypes: ['design-adr'], label: 'title' } },
         { include: ['docs/tmp/**'], exempt: true },
@@ -85,6 +85,19 @@ export const SPINE_INVALID_CONFIG = {
     frontmatter: {
       unmatched: 'error',
       pathRules: [{ include: ['docs/adr/*.md'], rule: { allowedTypes: ['design-adr'], label: 'title' } }],
+    },
+  },
+};
+
+/** Spine-invalid: an entry pairs `excludeFiles` with a wildcard-free `include`.
+ * A literal-path include names exactly one file, so carving from it is
+ * contradictory. GEN-002: config-shape-valid fails. GEN-003: the floor governs
+ * nothing (the all-or-nothing contract mirrors the spine rejection). */
+export const EXCLUDE_FILES_LITERAL_INCLUDE_CONFIG = {
+  version: MOCK_HARNESS_VERSION,
+  markdown: {
+    frontmatter: {
+      pathRules: [{ include: ['README.md'], excludeFiles: ['README.md'], rule: { label: 'title' } }],
     },
   },
 };

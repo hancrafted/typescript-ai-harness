@@ -60,8 +60,8 @@ const VALID_ENTRY_TIERS = ['error', 'warning'];
 
 // The generic spine: closed key sets at block, FileSet and entry level.
 const BLOCK_KEYS = ['unmatched', 'coverage', 'settings', 'pathRules'];
-const FILESET_KEYS = ['include', 'exclude'];
-const ENTRY_KEYS = ['include', 'exclude', 'exempt', 'severity', 'rule'];
+const FILESET_KEYS = ['include', 'excludeFiles'];
+const ENTRY_KEYS = ['include', 'excludeFiles', 'exempt', 'severity', 'rule'];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -70,6 +70,24 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 // A FileSet list: non-empty array of non-empty glob strings.
 function isGlobArray(v: unknown): boolean {
   return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0);
+}
+
+// A glob carries a wildcard when it holds a magic char (*, ?, [, {). include
+// may carry them; excludeFiles must not (it lists literal file paths) and is
+// only meaningful when include carries a wildcard — a wildcard-free include
+// names one file, so carving from it is contradictory (checkFileSetFields).
+const GLOB_MAGIC_RE = /[*?[{]/;
+function hasWildcard(patterns: string[]): boolean {
+  return patterns.some((p) => GLOB_MAGIC_RE.test(p));
+}
+
+// An excludeFiles list: non-empty array of non-empty LITERAL file paths — each
+// a string carrying no glob magic char. Wildcards are rejected here (the field
+// lists files, never a pattern), unlike include which is a glob array.
+function isLiteralFileArray(v: unknown): boolean {
+  return (
+    Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0 && !GLOB_MAGIC_RE.test(x))
+  );
 }
 
 async function tryReadFile(ctx: RuleContext, path: string): Promise<string | null> {
@@ -180,14 +198,29 @@ async function declaredPathsOf(ctx: RuleContext): Promise<Set<string>> {
   return new Set(source === null ? [] : parseFences(source).map((f) => f.path));
 }
 
-// FileSet fields shared by coverage and pathRules entries: include required,
-// exclude optional, both non-empty arrays of non-empty globs.
+// FileSet fields shared by coverage and pathRules entries: include required (a
+// non-empty array of non-empty globs); excludeFiles optional and, when present,
+// a non-empty array of non-empty LITERAL file paths (no wildcards) that is only
+// meaningful when include carries a wildcard — a literal-path include names one
+// file, so carving from it is contradictory (GEN-002 §3.1.4).
 function checkFileSetFields(emit: Emit, where: string, obj: Record<string, unknown>): void {
   if (!isGlobArray(obj.include)) {
     emit(`'${where}.include' must be a non-empty array of non-empty glob strings`);
   }
-  if (obj.exclude !== undefined && !isGlobArray(obj.exclude)) {
-    emit(`'${where}.exclude' must be a non-empty array of non-empty glob strings — omit it or list at least one glob`);
+  if (obj.excludeFiles !== undefined && !isLiteralFileArray(obj.excludeFiles)) {
+    emit(
+      `'${where}.excludeFiles' must be a non-empty array of non-empty literal file paths — no wildcards (*, ?, [, {); omit it or list at least one file`,
+    );
+  }
+  if (
+    obj.excludeFiles !== undefined &&
+    isLiteralFileArray(obj.excludeFiles) &&
+    isGlobArray(obj.include) &&
+    !hasWildcard(obj.include as string[])
+  ) {
+    emit(
+      `'${where}.excludeFiles' is only meaningful when '${where}.include' has a wildcard (*, ?, [, {) — a literal-path include matches one file, so drop excludeFiles or widen the include`,
+    );
   }
 }
 
@@ -205,7 +238,7 @@ function checkCoverage(emit: Emit, where: string, block: Record<string, unknown>
   }
   for (const key of Object.keys(block.coverage)) {
     if (!FILESET_KEYS.includes(key)) {
-      emit(`'${where}.coverage.${key}' is not a FileSet key — a FileSet is {include, exclude}`);
+      emit(`'${where}.coverage.${key}' is not a FileSet key — a FileSet is {include, excludeFiles}`);
     }
   }
   checkFileSetFields(emit, `${where}.coverage`, block.coverage);
@@ -219,7 +252,7 @@ function checkEntrySpine(emit: Emit, where: string, entry: unknown): void {
   for (const key of Object.keys(entry)) {
     if (!ENTRY_KEYS.includes(key)) {
       emit(
-        `'${where}.${key}' is not a spine entry key — entries are {include, exclude, exempt, severity, rule}; block-owned policy goes under 'rule'`,
+        `'${where}.${key}' is not a spine entry key — entries are {include, excludeFiles, exempt, severity, rule}; block-owned policy goes under 'rule'`,
       );
     }
   }
@@ -339,7 +372,7 @@ export default {
 
     'config-shape-valid': {
       description:
-        "The config is `{version, [namespace]: {[block]: ConfigBlock}}`, validated domain-blind: every top-level key beside `version` is a namespace object holding blocks; every present `namespace.block` key matches a path some extension fence declares (the typo guard — a misspelled block name errors instead of silently falling back to the block's default, yet no concrete name is hardcoded here); a declared path absent from the config is fine (the owner's built-in default). Each block is a ConfigBlock exactly two key levels deep (the depth guard) satisfying the generic spine: closed block keys {unmatched, coverage, settings, pathRules}; unmatched is 'exempt' or 'error'; a coverage FileSet is present iff unmatched is 'error'; FileSets are {include, exclude} with include a non-empty array of non-empty globs; entries are closed to {include, exclude, exempt, severity, rule}; an exempt entry carries neither rule nor severity; the entry tier is 'error' or 'warning'. The `rule` payload and `settings` contents stay opaque — their schemas belong to the block's owning ADR. No-ops when the config is absent or unparseable.",
+        "The config is `{version, [namespace]: {[block]: ConfigBlock}}`, validated domain-blind: every top-level key beside `version` is a namespace object holding blocks; every present `namespace.block` key matches a path some extension fence declares (the typo guard — a misspelled block name errors instead of silently falling back to the block's default, yet no concrete name is hardcoded here); a declared path absent from the config is fine (the owner's built-in default). Each block is a ConfigBlock exactly two key levels deep (the depth guard) satisfying the generic spine: closed block keys {unmatched, coverage, settings, pathRules}; unmatched is 'exempt' or 'error'; a coverage FileSet is present iff unmatched is 'error'; FileSets are {include, excludeFiles} with include a non-empty array of non-empty globs, and excludeFiles a non-empty array of literal file paths (no wildcards) present only when include carries a wildcard; entries are closed to {include, excludeFiles, exempt, severity, rule}; an exempt entry carries neither rule nor severity; the entry tier is 'error' or 'warning'. The `rule` payload and `settings` contents stay opaque — their schemas belong to the block's owning ADR. No-ops when the config is absent or unparseable.",
       severity: 'error',
       async check(ctx) {
         const emit: Emit = (message) =>

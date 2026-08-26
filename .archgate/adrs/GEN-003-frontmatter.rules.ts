@@ -11,11 +11,12 @@
 //     silently weakening the floor.
 //   - `frontmatter-floor` consumes the block: every governed markdown file,
 //     resolved to its pathRules entry by FileSet arithmetic (glob include −
-//     exclude) first-match-wins, carries the floor — a kebab-case type, exactly
+//     excludeFiles) first-match-wins, carries the floor — a kebab-case type, exactly
 //     one pinned label (name xor title), an optional cap-checked description
 //     (required when the entry's rule says so) and optional comma-separated
-//     kebab-case tags. Under unmatched: 'error' every in-coverage file no
-//     entry claims is a violation.
+//     kebab-case tags. An entry excludeFiles path that removes no file from its
+//     include set is warned as a dead carve-out. Under unmatched: 'error' every
+//     in-coverage file no entry claims is a violation.
 // Consumer contract (all-or-nothing, GEN-002 §3): config file absent, or a
 // healthy file without the block → the built-in DEFAULT_CONFIG below; file
 // present but unparseable, version skew against the installed harness release,
@@ -67,8 +68,8 @@ const KEBAB_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 // copy of GEN-002's checks (boolean, not reported: GEN-002 raises the errors).
 // Kept in lockstep via the shared conformance fixtures.
 const BLOCK_KEYS = ['unmatched', 'coverage', 'settings', 'pathRules'];
-const FILESET_KEYS = ['include', 'exclude'];
-const ENTRY_KEYS = ['include', 'exclude', 'exempt', 'severity', 'rule'];
+const FILESET_KEYS = ['include', 'excludeFiles'];
+const ENTRY_KEYS = ['include', 'excludeFiles', 'exempt', 'severity', 'rule'];
 const VALID_UNMATCHED = ['exempt', 'error'];
 const VALID_ENTRY_TIERS = ['error', 'warning'];
 
@@ -107,6 +108,24 @@ function isPositiveInt(n: unknown): boolean {
 
 function isGlobArray(v: unknown): boolean {
   return Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0);
+}
+
+// A glob carries a wildcard when it holds a magic char (*, ?, [, {). A FileSet's
+// excludeFiles lists literal file paths (never wildcards) and is meaningful only
+// against a wildcard include; the spine gate below mirrors GEN-002's
+// config-shape-valid so a config that rule would reject governs nothing (the
+// all-or-nothing consumer contract).
+const GLOB_MAGIC_RE = /[*?[{]/;
+function hasWildcard(patterns: string[]): boolean {
+  return patterns.some((p) => GLOB_MAGIC_RE.test(p));
+}
+
+// An excludeFiles list: non-empty array of non-empty LITERAL file paths — each a
+// string carrying no glob magic char. Mirrors GEN-002's isLiteralFileArray.
+function isLiteralFileArray(v: unknown): boolean {
+  return (
+    Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && x.length > 0 && !GLOB_MAGIC_RE.test(x))
+  );
 }
 
 function isKebabArray(a: unknown): boolean {
@@ -154,14 +173,35 @@ async function globAll(ctx: RuleContext, patterns: string[]): Promise<string[]> 
   return [...out];
 }
 
-// The FileSet arithmetic (GEN-002 §3): glob(include) − glob(exclude). An
-// excluded file is NOT claimed — it falls through to later entries (and
-// ultimately to `unmatched`), unlike an exempt entry, which claims and waives.
+// The FileSet arithmetic (GEN-002 §3): glob(include) minus the literal paths in
+// excludeFiles. An excluded file is NOT claimed — it falls through to later
+// entries (and ultimately to `unmatched`), unlike an exempt entry, which claims
+// and waives.
 async function fileSetFiles(ctx: RuleContext, fileSet: Record<string, unknown>): Promise<string[]> {
   const files = await globAll(ctx, Array.isArray(fileSet.include) ? (fileSet.include as string[]) : []);
-  if (!Array.isArray(fileSet.exclude) || fileSet.exclude.length === 0) return files;
-  const excluded = new Set(await globAll(ctx, fileSet.exclude as string[]));
+  const excludeFiles = Array.isArray(fileSet.excludeFiles) ? (fileSet.excludeFiles as string[]) : [];
+  if (excludeFiles.length === 0) return files;
+  const excluded = new Set(excludeFiles);
   return files.filter((f) => !excluded.has(f));
+}
+
+// Same FileSet arithmetic as fileSetFiles, but also reports each excludeFiles
+// path that removes NO file from this entry's include set — a dead carve-out,
+// usually a typo'd path, that silently does nothing. Because excludeFiles are
+// literal, a dead one is simply a listed path absent from the include set.
+// frontmatter-floor surfaces it at warning tier so a live carve-out is
+// distinguishable from a dead one. The returned file set matches fileSetFiles.
+async function entryFiles(
+  ctx: RuleContext,
+  entry: Record<string, unknown>,
+): Promise<{ files: string[]; deadExcludes: string[] }> {
+  const includeFiles = await globAll(ctx, Array.isArray(entry.include) ? (entry.include as string[]) : []);
+  const excludeFiles = Array.isArray(entry.excludeFiles) ? (entry.excludeFiles as string[]) : [];
+  if (excludeFiles.length === 0) return { files: includeFiles, deadExcludes: [] };
+  const includeSet = new Set(includeFiles);
+  const excluded = new Set(excludeFiles);
+  const deadExcludes = excludeFiles.filter((f) => !includeSet.has(f));
+  return { files: includeFiles.filter((f) => !excluded.has(f)), deadExcludes };
 }
 
 // ---- block validation shared by both rules ----
@@ -170,14 +210,19 @@ function fileSetOk(fs: unknown): boolean {
   if (!isRecord(fs)) return false;
   if (Object.keys(fs).some((k) => !FILESET_KEYS.includes(k))) return false;
   if (!isGlobArray(fs.include)) return false;
-  return fs.exclude === undefined || isGlobArray(fs.exclude);
+  if (fs.excludeFiles === undefined) return true;
+  return isLiteralFileArray(fs.excludeFiles) && hasWildcard(fs.include as string[]);
 }
 
 function entrySpineOk(entry: unknown): boolean {
   if (!isRecord(entry)) return false;
   if (Object.keys(entry).some((k) => !ENTRY_KEYS.includes(k))) return false;
   if (!isGlobArray(entry.include)) return false;
-  if (entry.exclude !== undefined && !isGlobArray(entry.exclude)) return false;
+  if (
+    entry.excludeFiles !== undefined &&
+    !(isLiteralFileArray(entry.excludeFiles) && hasWildcard(entry.include as string[]))
+  )
+    return false;
   if (entry.exempt !== undefined && typeof entry.exempt !== 'boolean') return false;
   if (entry.exempt === true && (entry.rule !== undefined || entry.severity !== undefined)) return false;
   if (entry.severity !== undefined && !VALID_ENTRY_TIERS.includes(entry.severity as string)) return false;
@@ -528,7 +573,7 @@ export default {
 
     'frontmatter-floor': {
       description:
-        "Every governed markdown file, resolved to its pathRules entry by FileSet arithmetic (glob include − exclude) first-match-wins — or to the built-in default when the config file or its markdown.frontmatter block is absent — carries the OKF floor: a kebab-case type (checked against the entry rule's allowedTypes, plus draft when settings.draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required when the entry's rule sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry claims and waives; an excluded file falls through. Under unmatched: 'error', every in-coverage file no entry claims is a violation. All-or-nothing consumer contract: an unparseable config, a version stamp that is missing or skewed against the installed harness release, or a spine- or payload-invalid block governs NOTHING — GEN-002 and frontmatter-config-valid are the loud gate. Violations emit at the matched entry's tier (default error).",
+        "Every governed markdown file, resolved to its pathRules entry by FileSet arithmetic (glob include − excludeFiles) first-match-wins — or to the built-in default when the config file or its markdown.frontmatter block is absent — carries the OKF floor: a kebab-case type (checked against the entry rule's allowedTypes, plus draft when settings.draftEscape is on), exactly the pinned label (name xor title, default cap 64), an optional description (required when the entry's rule sets requireDescription, default cap 1024), and optional comma-separated kebab-case tags (default cap 30 each). An exempt entry claims and waives; an excluded file falls through, and an entry excludeFiles path that removes no file from its include set is reported at warning tier as a dead carve-out. Under unmatched: 'error', every in-coverage file no entry claims is a violation. All-or-nothing consumer contract: an unparseable config, a version stamp that is missing or skewed against the installed harness release, or a spine- or payload-invalid block governs NOTHING — GEN-002 and frontmatter-config-valid are the loud gate. Violations emit at the matched entry's tier (default error).",
       severity: 'error',
       async check(ctx) {
         const block = await resolveBlock(ctx);
@@ -539,7 +584,14 @@ export default {
         const claimed = new Set<string>();
         for (const entry of pathRules) {
           if (!isRecord(entry)) continue;
-          for (const file of await fileSetFiles(ctx, entry)) {
+          const { files, deadExcludes } = await entryFiles(ctx, entry);
+          for (const deadFile of deadExcludes) {
+            ctx.report.warning({
+              message: `Config excludeFiles path '${deadFile}' removes no file from its entry's include [${(entry.include as string[]).join(', ')}] — a dead carve-out (likely a typo); fix the path or drop it (GEN-003 [frontmatter-floor]).`,
+              file: CONFIG_PATH,
+            });
+          }
+          for (const file of files) {
             if (claimed.has(file)) continue; // an earlier entry owns it (first-match-wins)
             claimed.add(file);
             if (entry.exempt === true) continue; // claims and waives — floor off for this entry
@@ -552,7 +604,7 @@ export default {
           for (const file of await fileSetFiles(ctx, block.coverage)) {
             if (claimed.has(file)) continue;
             ctx.report.violation({
-              message: `File is inside the frontmatter block's coverage but matched no pathRules entry — add a governing entry, an exempt carve-out, or a coverage exclude (GEN-003 [frontmatter-floor]).`,
+              message: `File is inside the frontmatter block's coverage but matched no pathRules entry — add a governing entry, an exempt carve-out, or a coverage excludeFiles path (GEN-003 [frontmatter-floor]).`,
               file,
             });
           }
