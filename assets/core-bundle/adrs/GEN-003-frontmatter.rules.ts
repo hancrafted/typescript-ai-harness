@@ -439,40 +439,66 @@ function checkDescription(emit: Emit, file: string, fm: string, rule: Record<str
   }
 }
 
-// `tags`, when present, is a comma-separated list; each tag kebab-case and
-// within the entry's cap. Must be a single-line comma-separated string, not a
-// YAML list format (block list or inline array). No closed set, no count limit.
+// `tags`, when present, is an open set (no closed vocabulary, no count limit);
+// each tag is kebab-case and within the entry's cap. Two single-line forms are
+// accepted and normalized to the same list before validation: a comma-separated
+// string (`tags: a, b`) and a YAML inline flow array (`tags: [a, b]`, whose
+// items may be quoted and surrounded by whitespace). A multi-line block sequence
+// (`tags:\n  - a`) stays out of scope pending AST-hardening (#7).
 function checkTags(emit: Emit, file: string, fm: string, rule: Record<string, unknown>): void {
   const tagsMatch = fm.match(/^tags[ \t]*:(.*)$/m);
   if (!tagsMatch) return;
 
   const afterKey = tagsMatch[1].trim();
 
-  // Check if tags is formatted as a YAML list/array:
-  // 1. Inline array or list item on the same line: tags: [a, b] or tags: - a
-  // 2. Block list on subsequent lines: tags:\n  - a
-  const index = tagsMatch.index!;
-  const restOfFm = fm.slice(index);
+  // Reject multi-line YAML block sequences — a bare list marker on the tags line
+  // (`tags: - a`) or a `- item` on a following line before the next key. Parsing
+  // these is deferred (#7); only the two single-line forms are handled below.
+  const restOfFm = fm.slice(tagsMatch.index!);
   const nextKeyMatch = restOfFm.slice(tagsMatch[0].length).match(/\r?\n[a-zA-Z0-9_-]+[ \t]*:/);
   const tagsSection = nextKeyMatch ? restOfFm.slice(0, tagsMatch[0].length + nextKeyMatch.index!) : restOfFm;
-
-  const isList =
-    afterKey.startsWith('[') ||
-    afterKey.startsWith('-') ||
-    /^\r?\n[ \t]*-[ \t]+/m.test(tagsSection.slice(tagsMatch[0].length));
-
-  if (isList) {
+  const isBlockSequence =
+    afterKey.startsWith('-') || /^\r?\n[ \t]*-[ \t]+/m.test(tagsSection.slice(tagsMatch[0].length));
+  if (isBlockSequence) {
     emit({
-      message: `Governed file 'tags' must be a comma-separated string, not a YAML list (GEN-003 [frontmatter-floor]).`,
+      message: `Governed file 'tags' must be a comma-separated string or single-line inline array, not a multi-line YAML block sequence (GEN-003 [frontmatter-floor]).`,
       file,
     });
     return;
   }
 
-  const raw = getFrontmatterValue(fm, 'tags');
-  if (!raw) return;
+  let tags: string[];
+  if (afterKey.startsWith('[')) {
+    // Inline flow array: it must open and close on the one line the floor reads.
+    // An unclosed `[` is a multi-line array — malformed for a single-line parser.
+    if (!afterKey.endsWith(']')) {
+      emit({
+        message: `Governed file 'tags' inline array must open and close on a single line (GEN-003 [frontmatter-floor]).`,
+        file,
+      });
+      return;
+    }
+    // Strip the brackets, split on commas, and unquote each item. An empty array
+    // (`[]`) yields no tags; a trailing comma leaves an empty item that fails the
+    // per-tag check below, exactly as a trailing comma does in the string form.
+    const inner = afterKey.slice(1, -1).trim();
+    tags =
+      inner === ''
+        ? []
+        : inner.split(',').map((t) =>
+            t
+              .trim()
+              .replace(/^["']|["']$/g, '')
+              .trim(),
+          );
+  } else {
+    const raw = getFrontmatterValue(fm, 'tags');
+    if (!raw) return;
+    tags = raw.split(',').map((t) => t.trim());
+  }
+
   const cap = isPositiveInt(rule.maxTag) ? (rule.maxTag as number) : DEFAULT_MAX_TAG;
-  for (const tag of raw.split(',').map((t) => t.trim())) {
+  for (const tag of tags) {
     if (!KEBAB_RE.test(tag)) {
       emit({
         message: `Governed file tag '${tag}' must be kebab-case — lowercase alphanumerics joined by single hyphens (GEN-003 [frontmatter-floor]).`,

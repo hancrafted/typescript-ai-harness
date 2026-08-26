@@ -31,7 +31,7 @@ Rejected alternatives:
 1. **`type`:** always required, kebab-case. With the entry's `allowedTypes`, the value MUST be a member (plus `draft` when `settings.draftEscape` is on); without it, any kebab-case value passes.
 2. **`Label`:** exactly one of `name` xor `title`, non-empty, no longer than `maxLabel`. When the entry pins a label, only that key MAY appear — the unpinned label, or both, is a violation.
 3. **`description`:** optional; required when the entry sets `requireDescription`. When present, no longer than `maxDescription`.
-4. **`tags`:** optional; a comma-separated list, each tag kebab-case and no longer than `maxTag`. No closed set, no count limit.
+4. **`tags`:** optional, an open set with no count limit; each tag kebab-case and no longer than `maxTag`. Accepted as either a comma-separated string or a single-line YAML inline flow array (`tags: [a, b]`) — normalized to the same list — while a multi-line block sequence stays out of scope (Consequences).
 5. **Dead carve-out:** while resolving an entry's FileSet, an `excludeFiles` path that removes no file from that entry's `include` set is reported at warning tier — a typo'd or already-out-of-scope path is surfaced, not silently inert. GEN-002's spine already bans `excludeFiles` on a wildcard-free include; this catches the path that is well-formed but matches nothing.
 
 ### 3. Config
@@ -64,7 +64,7 @@ Rejected alternatives:
 **Negative:**
 
 1. **The default fires on install:** an unfrontmattered `README.md`/`AGENTS.md`/`CLAUDE.md` errors until fixed — accepted; the fix is cheap and silent non-governance defeats the point.
-2. **Regex frontmatter parsing:** floor keys must be single-line values; block scalars are out of scope until AST-hardening (deferred).
+2. **Regex frontmatter parsing:** floor keys are read as single-line values — `tags` accepts both the comma-separated and inline-array forms on that line, but multi-line block sequences and other block scalars stay out of scope until AST-hardening (deferred).
 
 ## Compliance and Enforcement
 

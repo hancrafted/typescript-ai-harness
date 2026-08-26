@@ -399,20 +399,70 @@ describe('frontmatter-floor', () => {
     expect(violations).toEqual([]);
   });
 
-  it('fails when tags is formatted as a YAML block list', async () => {
+  it('fails when tags is a multi-line YAML block sequence (deferred: #7)', async () => {
     const files = {
       'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags:\n   - governance\n   - frontmatter-floor'),
     };
     const { ctx, violations } = makeCtx(files, { config: adrRules });
     await floor.check(ctx);
-    expect(violations.some((v) => /must be a comma-separated string, not a YAML list/.test(v.message))).toBe(true);
+    expect(violations.some((v) => /not a multi-line YAML block sequence/.test(v.message))).toBe(true);
   });
 
-  it('fails when tags is formatted as a YAML inline array', async () => {
+  it('accepts a single-line YAML inline array of tags', async () => {
     const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [governance, frontmatter-floor]') };
     const { ctx, violations } = makeCtx(files, { config: adrRules });
     await floor.check(ctx);
-    expect(violations.some((v) => /must be a comma-separated string, not a YAML list/.test(v.message))).toBe(true);
+    expect(violations).toEqual([]);
+  });
+
+  it('accepts an inline array with quoted items and surrounding whitespace', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [ "a-b" ,  \'c-d\' ]') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('accepts a single-item inline array', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [governance]') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('accepts an empty inline array as no tags', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: []') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations).toEqual([]);
+  });
+
+  it('applies per-tag kebab-case validation inside an inline array', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [Governance, ok]') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /tag 'Governance' must be kebab-case/.test(v.message))).toBe(true);
+  });
+
+  it('applies the per-tag cap inside an inline array', async () => {
+    const long = 'x'.repeat(31);
+    const files = { 'docs/adr/a.md': md(`type: design-adr\ntitle: "A"\ntags: [${long}]`) };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /is 31 chars, exceeding the matched entry's 30-char cap/.test(v.message))).toBe(true);
+  });
+
+  it('flags a trailing comma in an inline array as a malformed (empty) tag', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [governance,]') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /tag '' must be kebab-case/.test(v.message))).toBe(true);
+  });
+
+  it('flags an inline array that does not close on the same line', async () => {
+    const files = { 'docs/adr/a.md': md('type: design-adr\ntitle: "A"\ntags: [governance, frontmatter-floor') };
+    const { ctx, violations } = makeCtx(files, { config: adrRules });
+    await floor.check(ctx);
+    expect(violations.some((v) => /inline array must open and close on a single line/.test(v.message))).toBe(true);
   });
 
   it('in an open governed entry (no rule payload), fails when neither name nor title is present', async () => {

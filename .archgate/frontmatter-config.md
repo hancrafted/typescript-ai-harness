@@ -79,7 +79,7 @@ Unknown `rule` keys are errors — `maxDescriptions` cannot silently weaken the 
 - `type` — required; kebab-case; a member of `allowedTypes` when the entry's rule closes it (`draft` also passes under `draftEscape`).
 - `name` **xor** `title` — required; exactly one; the pinned one when the entry's rule pins.
 - `description` — optional unless the entry's rule sets `requireDescription`.
-- `tags` — optional; a comma-separated list of kebab-case tags, e.g. `tags: governance, frontmatter`. No closed set, no count limit.
+- `tags` — optional; kebab-case tags written as a comma-separated list or a single-line inline array, e.g. `tags: governance, frontmatter` or `tags: [governance, frontmatter]`. No closed set, no count limit.
 
 ## exempt vs. draft
 
