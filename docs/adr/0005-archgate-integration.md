@@ -10,7 +10,7 @@ archgate ships an `init` command but exposes **no non-interactive contract** —
 
 **v4 retires the shell-out entirely. Both modes now direct-write, deterministically.** Two things changed the calculus:
 
-1. **The harness now ships a governed Core governance bundle** ([ADR-0010](./0010-core-governance-bundle-distribution.md)). `archgate init` seeds an *example ADR* that almost certainly violates GEN-001's shape rules (numbered anchors, twin rule markers, six exact sections, test sibling, symlink…), so `archgate check` would fail on a file archgate itself wrote — into the very directory core owns. archgate exposes no flag to suppress it.
+1. **The harness now ships a governed Core governance bundle** ([ADR-0010](./0010-core-governance-bundle-distribution.md)). `archgate init` seeds an *example ADR* that almost certainly violates GEN-001's shape rules (numbered anchors, twin rule markers, six exact sections, test sibling, size budget…) and GEN-002's symlink rule, so `archgate check` would fail on a file archgate itself wrote — into the very directory core owns. archgate exposes no flag to suppress it.
 2. **`npx archgate init` is network- and environment-fragile.** It fetches over the network and installs a global Claude plugin into `~/.claude`; a corporate proxy (Zscaler, reported on a locked-down Windows machine) blocks it, so the interactive path was already silently broken there. Everything else `init` did deterministically — write `.archgate/config.json` and `.claude/settings.local.json` — the headless path already did itself.
 
 The `--yes` flag still threads into the plan context (`Ctx.yes`), but archgate no longer branches on it for *what* to write; both modes write the same deterministic surface.

@@ -41,54 +41,20 @@ _Avoid_: template, default, starter file
 ## ADR governance
 
 **ADR Contract**:
-The self-hosted ADR (`GEN-001-adr`) that governs the shape and runtime delivery of every ADR under `.archgate/adrs/` — the ADR *about* ADRs. Self-hosting means its own rules validate its own file. Distinct from an individual design/decision ADR, which it governs.
+The self-hosted ADR (`GEN-001-adr`) that governs the shape of every ADR under `.archgate/adrs/` — the ADR *about* ADRs. It owns the frontmatter bundle, the six canonical sections, the numbering grammar, the size budget, and the companion rules-file duties. Self-hosting means its own rules validate its own file. Runtime delivery is not its business — that is the Claude Code rules symlink, owned by `GEN-002-adr-symlink-claude-rules`. Distinct from an individual design/decision ADR, which it governs.
 _Avoid_: meta-ADR, ADR spec
 
 **Claude Code rules symlink**:
-The runtime enforcement layer that puts a governing ADR into an agent's context *during* a session, not only at commit — a symlink from `.claude/rules/` to the ADR, scoped by the ADR's `paths:`. It is *soft* (context plus instruction); archgate at commit/push is the hard backstop.
+The runtime enforcement layer that puts a governing ADR into an agent's context *during* a session, not only at commit — a symlink from `.claude/rules/` to the ADR, scoped by the ADR's `paths:`. It is *soft* (context plus instruction); archgate at commit/push is the hard backstop. Owned by `GEN-002-adr-symlink-claude-rules`.
 _Avoid_: Runtime loading channel (retired name), rule injection, context loader
 
+**files (ADR field)**:
+The glob set archgate inspects when it runs an ADR's rules — the *check* channel. It bounds which changed files the rules judge; omitting it widens the check to every project file. Required on every ADR, and inline YAML flow form only.
+_Avoid_: scope globs, include patterns
+
 **paths (ADR field)**:
-An ADR's single declared glob scope. It both documents the ADR's governance surface and triggers Claude Code to load the ADR when a matching file is Read. The one source of scope — there is no second list.
-_Avoid_: `files` (the retired field name), scope globs
-
-## Frontmatter governance
-
-**Frontmatter floor**:
-The minimum YAML frontmatter every *governed* markdown file must carry: `type` + exactly one of `name`/`title`. `description` and `tags` are optional, cap-checked keys; a pathRules entry's `rule` payload can make `description` mandatory via `requireDescription`. A floor, not a ceiling — an entry may require more, never less. Owned by `GEN-003-frontmatter`; full config reference in `.archgate/frontmatter-config.md`.
-_Avoid_: frontmatter schema, header, metadata block
-
-**pathRules entry**:
-One ordered element of a Config block's `pathRules`, claiming a FileSet of files (`include` minus `excludeFiles`) first-match-wins and carrying one policy: *exempt* (claims and waives the floor) or *governed* (Spine keys plus an optional block-owned `rule` payload). An entry `excludeFiles` path does NOT exempt — the file falls through to later entries, then to `unmatched`. Posture (allowlist vs denylist) is emergent from which entries are declared, not a mode flag.
-_Avoid_: Zone (retired name), scope, surface
-
-**Harness config**:
-The root `.typescript-ai-harness.json` file carrying all harness configuration as data, separate from archgate's own `.archgate/config.json`. A Seeded config file: written once at install, never patched on re-run; upgrades are an explicit migrate step guarded by the top-level `version` stamp — a semver string that must exactly match the installed harness release. The shape is exactly two key levels: `version` plus namespaces (e.g. `markdown`) holding Config blocks. The envelope and Spine are owned by `GEN-002-harness-config`; each block's registration and payload by its owning ADR.
-_Avoid_: manifest (retired name), frontmatter config file
-
-**Config block**:
-One `namespace.block` key of the harness config (currently only `markdown.frontmatter`), owned *wholesale* by a single governance ADR: its Config extension fence, payload schema, validation, interpretation, and built-in default. The set of legal block keys is closed — it is the union of fence-declared paths, so an undeclared block name is an error, never a silent fallback — yet GEN-002 hardcodes no name.
-_Avoid_: section, module, plugin
-
-**Config extension fence**:
-A marker-delimited region of the config extension types file, `// <ADR-ID>-START: <namespace.block>` … `// <ADR-ID>-END`, where one block ADR registers its Config block and carries its types. GEN-002 owns the fence *grammar* (balance, unique well-formed paths); the block ADR owns the fence *contents*. Adding a block means adding a fence plus an owning ADR — GEN-002 is never amended.
-_Avoid_: registry entry, marker block, region
-
-**Spine**:
-The generic, domain-blind grammar every path-scoped Config block satisfies, owned by GEN-002: `pathRules` (FileSet entries with `exempt`/`severity`/`rule`), `unmatched` (`exempt` or `error`), `coverage` (required iff `unmatched: error`), and `settings`. The Spine never inspects inside `rule` or `settings` — those are block-owned payload.
-_Avoid_: schema (ambiguous), envelope (that's the file-level contract)
-
-**FileSet**:
-The `{include, excludeFiles}` pair naming a set of files: `glob(include)` minus the literal paths in `excludeFiles`. `include` is always a non-empty array of globs; `excludeFiles` is optional literal file paths (no wildcards), meaningful only when `include` carries a wildcard. Used by every pathRules entry and by `coverage`; excluding a file from an entry lets it fall through, excluding it from `coverage` removes it from the strict universe.
-_Avoid_: match (retired name), glob (the FileSet holds globs; it isn't one)
-
-**rule (pathRules payload)**:
-The block-owned policy object inside a governed pathRules entry — for the frontmatter block: `allowedTypes`, `label`, `requireDescription`, and the caps. Opaque to GEN-002's Spine; schema owned by the block ADR (GEN-003). Deliberately overloaded with an archgate *executable rule* (`*.rules.ts`) — qualify as "rule payload" vs "archgate rule" when ambiguity bites.
-_Avoid_: policy, options (reserved), config (too broad)
-
-**Field policy**:
-The harness's own answer to *how strictly* one governed frontmatter field is enforced — which checks apply to it, and at what severity. Distinct from the field itself: OKF fixes whether a field exists and whether it is required, while the field policy is set here, per pathRules entry, from config. A policy may narrow what OKF allows, never widen it.
-_Avoid_: field rule (that names the archgate rule, not the policy), strictness mode
+The glob set that steers the author — the *steer* channel. It documents the ADR's governance surface and triggers Claude Code to load the ADR when a matching file is Read. Optional, and free to differ from `files`: check broad, steer narrow.
+_Avoid_: scope globs
 
 **Design ADR**:
 A prose decision record under `docs/adr/` (`type: design-adr`) authored via the Matt-Pocock `/domain-modeling` skill — the lightweight *why*. Distinct from a Governance ADR; the two coexist and are disambiguated by `type`, never by prose.
@@ -99,16 +65,27 @@ An archgate ADR under `.archgate/adrs/` (`type: adr`) with an executable `*.rule
 _Avoid_: meta-ADR; bare "ADR" (ambiguous — always qualify)
 
 **Core governance bundle** ("core"):
-The foundational Governance ADR set the harness ships, installed *intrinsically* by the archgate Integration with no sub-option prompt. Membership is the explicit `ADR_CORE` list in the Harness build config — `GEN-001` today; the `GEN-001`–`GEN-009` range is reserved for foundational governance. A **Tool-owned** set: every file is fully overwritten on each run (each ADR's `.md` + `.rules.ts` + `.rules.test.ts`, plus the supporting `rules.d.ts` and `.claude/rules` symlinks). No Harness config rides along any more: `.typescript-ai-harness.json` configures frontmatter governance, which the bundle no longer ships, so nothing seeds it into a Target. A future sub-option list holds *optional* bundles; core is never in it.
+The foundational Governance ADR set the harness ships, installed *intrinsically* by the archgate Integration with no sub-option prompt. Membership is the explicit `ADR_CORE` list in the Harness build config — `GEN-001` and `GEN-002` today; the `GEN-001`–`GEN-009` range is reserved for foundational governance. A **Tool-owned** set: every file is fully overwritten on each run (each ADR's `.md` + `.rules.ts` + `.rules.test.ts`, plus the supporting `rules.d.ts` and `.claude/rules` symlinks). No config rides along: the bundle ships governance only. A future sub-option list holds *optional* bundles; core is never in it.
 _Avoid_: core ADRs (ambiguous), foundational pack, general governance
 
 **Harness build config** (`harness.config.json`):
-The root, Tool-owned build-metadata file naming what the harness ships — `ADR_CORE` (the Core governance bundle's ADR ids), the curated supporting-files list, and the `ARCHGATE_VERSION` range. Read by the release-time capture step and by the CLI on self-apply; **never shipped to a Target** (the Target receives the materialised Bundle asset, not this file). Distinct from the Harness config (`.typescript-ai-harness.json`, which governs this repo and is no longer written into a Target) and from archgate's own `.archgate/config.json`.
-_Avoid_: manifest (retired), harness config (that is the target-facing runtime file)
+The root, Tool-owned build-metadata file naming what the harness ships — `ADR_CORE` (the Core governance bundle's ADR ids), the curated supporting-files list, and the `ARCHGATE_VERSION` range. Read by the release-time capture step and by the CLI on self-apply; **never shipped to a Target** (the Target receives the materialised Bundle asset, not this file). Distinct from archgate's own `.archgate/config.json`. It is now the only harness-owned config file — the target-facing `.typescript-ai-harness.json` is deleted.
+_Avoid_: manifest (retired), harness config (retired — the target-facing runtime file is gone)
 
 **Bundle asset** ("capture"):
 The committed, derived copy of the Core governance bundle that travels with the CLI, captured from the canonical `.archgate/adrs/` (+ supporting) files by the release-time capture step. The CLI writes it into a Target's `.archgate/**` with overwrite (Tool-owned) and mints the `.claude/rules/` symlinks. Never hand-edited — the capture is scripted and CI-gated, so it cannot drift from the canonical source. On self-apply the asset equals its source, so writing is a byte-identical no-op — the dogfood proof that the update mechanism works.
 _Avoid_: template (reserved for the string-template model), snapshot (reserved for archgate's config/settings capture, ADR-0005)
+
+## Frontmatter governance
+
+> **Withdrawn.** `GEN-002-harness-config` and `GEN-003-frontmatter` are deleted, and the
+> `.typescript-ai-harness.json` config, its two ambient-types files, the shared fixtures and
+> `frontmatter-config.md` went with them. Frontmatter governance moves to
+> [`markdown-harness`](https://github.com/hancrafted/markdown-harness), which owns the vocabulary
+> that used to live here — the frontmatter floor, pathRules entries, the Spine, FileSets, Config
+> blocks and their extension fences, the `rule` payload and field policies. Re-import the terms
+> this repo actually needs once that harness ships; until then this context has no frontmatter
+> vocabulary, deliberately.
 
 ## CI/CD
 

@@ -164,13 +164,45 @@ repo (so a staged change can never commit a red tree).
   directly through [tsx](https://www.npmjs.com/package/tsx) via the git-spec dev inner
   loop; only the _published_ `bin` points at the bundle.
 - **npm only.** pnpm / yarn / bun detection is not implemented.
-- **One ADR is copied** by the archgate integration: the Core governance bundle, which is
-  `GEN-001` (the ADR Contract) as `.md` + `.rules.ts` + `.rules.test.ts`, the `@generated`
-  `.archgate/rules.d.ts` so your own rule files type-check before the first `archgate check`,
-  and a `.claude/rules/gen-001-adr.md` symlink that loads the contract into agent context.
-  Frontmatter governance is **not** shipped in this version.
+- **Two ADRs are copied** by the archgate integration — the Core governance bundle:
+  `GEN-001` (the ADR Contract) and `GEN-002` (the `.claude/rules` symlink channel), each as
+  `.md` + `.rules.ts` + `.rules.test.ts`, plus the `@generated` `.archgate/rules.d.ts` so your
+  own rule files type-check before the first `archgate check`, and one `.claude/rules/*.md`
+  symlink per ADR that loads it into agent context. Frontmatter governance is **not** shipped —
+  it moves to [markdown-harness](https://github.com/hancrafted/markdown-harness).
 - Deferred: an adaptation skill that fits the generic templates to a project's actual layout,
   and full Keep-a-Changelog commit-body validation.
+
+## Removing withdrawn ADRs
+
+**If you installed this harness at `v0.1.4` or earlier, do this before upgrading.**
+
+That release shipped `GEN-002-harness-config` and `GEN-003-frontmatter`. Both are withdrawn —
+frontmatter governance moves to [markdown-harness](https://github.com/hancrafted/markdown-harness).
+The CLI has no delete action, so it cannot remove them for you: it only ever writes files.
+
+`GEN-002` is the one that breaks things. The number now belongs to a different ADR
+(`GEN-002-adr-symlink-claude-rules`), so upgrading leaves two ADRs claiming id `GEN-002` and
+archgate refuses to load the directory at all:
+
+```
+error: Duplicate ADR ID: GEN-002
+```
+
+`archgate check` then exits non-zero with no output, and your whole gate is dead. Remove the old
+files first:
+
+```bash
+rm -f .archgate/adrs/GEN-002-harness-config.*
+rm -f .archgate/adrs/GEN-003-frontmatter.*
+rm -f .claude/rules/gen-002-harness-config.md .claude/rules/gen-003-frontmatter.md
+rm -f .archgate/harness-config-core.d.ts .archgate/harness-config-extension.d.ts
+rm -f .archgate/harness-config-fixtures.ts .archgate/frontmatter-config.md
+rm -f .typescript-ai-harness.json
+```
+
+Then re-run the harness and `archgate check`. Keep `.typescript-ai-harness.json` only if you
+have your own reader for it; nothing the harness ships reads it any more.
 
 ---
 
