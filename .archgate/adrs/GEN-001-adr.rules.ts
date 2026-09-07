@@ -1,22 +1,27 @@
 /// <reference path="../rules.d.ts" />
 
 // GEN-001 — ADR Contract: the meta-rules governing ADR markdown files under
-// .archgate/adrs/, their companion .rules.ts files, and the .claude/rules
-// runtime-loading symlinks. All rules run at error (GEN-001 §7); there is no
-// migration epoch — an ADR conforms fully or the build fails. Further rules or
-// a tier change land only by deliberate ADR amendment.
+// .archgate/adrs/ and their companion .rules.ts files — frontmatter bundle and
+// order, the six canonical sections, the size budget, the shape grammar, and
+// the rules-file duties. The .claude/rules runtime-loading channel is GEN-002's.
+// All rules run at error (GEN-001 §7); there is no migration epoch — an ADR
+// conforms fully or the build fails. Further rules or a tier change land only by
+// deliberate ADR amendment.
 const ADR_MD_GLOB = '.archgate/adrs/*.md';
 const RULES_GLOB = '.archgate/adrs/*.rules.ts';
 const ADRS_DIR = '.archgate/adrs/';
-const CLAUDE_RULES_GLOB = '.claude/rules/*.md';
 const ADR_BASENAME_RE = /^([A-Z]+-\d{3})-.+\.md$/;
 const RULES_BASENAME_RE = /^[A-Z]+-\d{3}-.+\.rules\.ts$/;
 const RULES_TEST_BASENAME_RE = /^[A-Z]+-\d{3}-.+\.rules\.test\.ts$/;
-// Lowercased ADR-shaped basename, as it appears under .claude/rules/.
-const CLAUDE_ADR_LINK_RE = /^[a-z]+-\d{3}-.+\.md$/;
 const BUILTIN_DOMAINS = ['architecture', 'backend', 'data', 'frontend', 'general'];
-const REQUIRED_KEYS = ['type', 'id', 'title', 'domain', 'rules'];
-const FIELD_ORDER = ['type', 'id', 'title', 'domain', 'rules', 'paths'];
+// `description` is required here and not upstream: it is the text `.archgate/INDEX.md`
+// carries for each ADR, so an absent one silently empties an index entry.
+const REQUIRED_KEYS = ['type', 'id', 'title', 'domain', 'rules', 'files', 'description'];
+// The two glob-valued keys adr-glob-inline governs; both must be flow lists.
+const GLOB_KEYS = ['files', 'paths'];
+// GEN-001 §4.1 — Windsurf's published cap, the strictest hard limit among the
+// five vendors that publish one. Counted in code points, matching `wc -m`.
+const MAX_ADR_CHARS = 12_000;
 const REQUIRED_SECTIONS = [
   '## Context',
   '## Decision',
@@ -54,20 +59,6 @@ function getFrontmatterValue(fm: string, key: string): string | null {
     .trim();
 }
 
-// A non-empty `paths:` is present when the key exists with a value that is not
-// an empty flow array `[]`. Block-form (`paths:\n  - "…"`) counts as empty here
-// by design — this repo authors `paths:` inline, matching the archgate ADR
-// convention the field-order check assumes.
-function hasNonEmptyPaths(fm: string): boolean {
-  const val = getFrontmatterValue(fm, 'paths');
-  return val !== null && val !== '' && !/^\[\s*\]$/.test(val);
-}
-
-// Expected runtime symlink path for an ADR file: the basename, lowercased.
-function symlinkPathFor(file: string): string {
-  return `.claude/rules/${basename(file).toLowerCase()}`;
-}
-
 async function tryReadFile(ctx: RuleContext, path: string): Promise<string | null> {
   try {
     return await ctx.readFile(path);
@@ -88,10 +79,6 @@ function stripFences(content: string): string {
       return inFence ? '' : line;
     })
     .join('\n');
-}
-
-function stripCodeSpans(text: string): string {
-  return text.replace(/`[^`\n]*`/g, '``');
 }
 
 // Section body from `## <name>` to the next `## ` heading (fences stripped).
@@ -214,7 +201,7 @@ export default {
   rules: {
     'adr-frontmatter': {
       description:
-        "ADR frontmatter: type/id/title/domain/rules present non-empty, exact field order type→id→title→domain→rules→paths, type is 'adr', id matches filename prefix, domain registered, rules:true ⇔ sibling .rules.ts.",
+        'ADR frontmatter: type/id/title/domain/rules/files/description present non-empty, type: adr leads, id matches filename prefix, domain registered, rules:true ⇔ sibling .rules.ts.',
       severity: 'error',
       async check(ctx) {
         let registered = BUILTIN_DOMAINS;
@@ -242,14 +229,13 @@ export default {
               });
             }
           }
-          const present = FIELD_ORDER.filter((k) => new RegExp(`^${k}[ \\t]*:`, 'm').test(fm));
-          const actual = fm
+          const firstKey = fm
             .split(/\r?\n/)
             .map((l) => l.match(/^([a-z]+)[ \t]*:/)?.[1])
-            .filter((k): k is string => k !== undefined && FIELD_ORDER.includes(k));
-          if (actual.join(',') !== present.join(',')) {
+            .find((k): k is string => k !== undefined);
+          if (firstKey !== 'type') {
             ctx.report.violation({
-              message: `ADR frontmatter field order must be type → id → title → domain → rules → paths, found ${actual.join(' → ')} (GEN-001 [adr-frontmatter]).`,
+              message: `ADR frontmatter must lead with 'type', found '${firstKey ?? 'none'}' (GEN-001 [adr-frontmatter]).`,
               file,
             });
           }
@@ -314,39 +300,22 @@ export default {
       },
     },
 
-    'adr-claude-rules-symlink': {
+    'adr-size-budget': {
       description:
-        'Every ADR with a non-empty paths: has a .claude/rules/<basename-lowercased>.md runtime entry; an ADR with empty/absent paths: has none; no orphaned ADR entry lingers. Presence only — the reader resolves symlinks, so a copied body is indistinguishable from a pointer.',
+        'An ADR markdown file stays under the character budget — its whole body loads into agent context on every Read matching its paths:, so length is a cost paid per Read, not per commit.',
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
-        const entries = new Set(await ctx.glob(CLAUDE_RULES_GLOB));
-        const expected = new Set<string>();
         for (const file of files) {
-          const fm = extractFrontmatter(await ctx.readFile(file)) ?? '';
-          const link = symlinkPathFor(file);
-          if (hasNonEmptyPaths(fm)) {
-            expected.add(link);
-            if (!entries.has(link)) {
-              ctx.report.violation({
-                message: `ADR declares paths: but has no runtime symlink — create '${link}' as a symlink to the ADR (GEN-001 [adr-claude-rules-symlink]).`,
-                file,
-              });
-            }
-          } else if (entries.has(link)) {
+          // Code points, not UTF-16 units: the 📜 rule markers are astral and
+          // would otherwise each count twice against the budget.
+          const size = [...(await ctx.readFile(file))].length;
+          if (size > MAX_ADR_CHARS) {
             ctx.report.violation({
-              message: `ADR has empty/absent paths: but a runtime entry exists at '${link}' — remove it, or write paths: as an inline flow list if the ADR was meant to be scoped (§2.7) (GEN-001 [adr-claude-rules-symlink]).`,
+              message: `ADR is ${size} characters, over the ${MAX_ADR_CHARS}-character budget — split Disciplines by glob into a second ADR, or compress prose to one-line imperatives (GEN-001 [adr-size-budget]).`,
               file,
             });
           }
-        }
-        for (const entry of entries) {
-          if (expected.has(entry)) continue;
-          if (!CLAUDE_ADR_LINK_RE.test(basename(entry))) continue; // not an ADR-shaped name — leave shared/hand-written rules alone
-          ctx.report.violation({
-            message: `Runtime symlink '${entry}' has no backing ADR with a non-empty paths: — remove the orphan (GEN-001 [adr-claude-rules-symlink]).`,
-            file: entry,
-          });
         }
       },
     },
@@ -505,25 +474,6 @@ export default {
       },
     },
 
-    'adr-no-review-tag': {
-      description:
-        'The retired [review] tag must not appear in an ADR outside code spans and fenced blocks — route the duty into Manual review duties instead.',
-      severity: 'error',
-      async check(ctx) {
-        const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
-        for (const file of files) {
-          const content = stripCodeSpans(stripFences(await ctx.readFile(file)));
-          const count = (content.match(/\[review\]/g) ?? []).length;
-          if (count > 0) {
-            ctx.report.violation({
-              message: `ADR contains ${count} retired [review] tag(s) outside code spans — route the duty into Manual review duties instead (GEN-001 [adr-no-review-tag]).`,
-              file,
-            });
-          }
-        }
-      },
-    },
-
     'adr-rules-test-sibling': {
       description: 'Every .archgate/adrs/*.rules.ts has a sibling *.rules.test.ts.',
       severity: 'error',
@@ -601,21 +551,23 @@ export default {
       },
     },
 
-    'adr-paths-inline': {
+    'adr-glob-inline': {
       description:
-        'paths:, when present, is an inline YAML flow list (e.g. paths: ["glob"]) — a bare, block-style, or null value parses as empty and silently drops the runtime scope (§2.7).',
+        'files: and paths:, when present, are inline YAML flow lists (e.g. files: ["glob"]) — a bare, block-style, or null value parses as empty here and silently drops that channel\'s scope (§2). Anchored to the §2 anchor, not an item number, so renumbering cannot stale this reference.',
       severity: 'error',
       async check(ctx) {
         const files = adrFiles(await ctx.glob(ADR_MD_GLOB));
         for (const file of files) {
           const fm = extractFrontmatter(await ctx.readFile(file));
           if (fm === null) continue; // adr-frontmatter owns the missing-frontmatter finding
-          const m = fm.match(/^paths[ \t]*:[ \t]*(.*)$/m);
-          if (m && !/^\[.*\]$/.test(m[1].trim())) {
-            ctx.report.violation({
-              message: `ADR 'paths:' must be an inline flow list like paths: ["glob"] — a bare, block-style, or null value parses as empty and silently drops the runtime scope (GEN-001 [adr-paths-inline]).`,
-              file,
-            });
+          for (const key of GLOB_KEYS) {
+            const m = fm.match(new RegExp(`^${key}[ \\t]*:[ \\t]*(.*)$`, 'm'));
+            if (m && !/^\[.*\]$/.test(m[1].trim())) {
+              ctx.report.violation({
+                message: `ADR '${key}:' must be an inline flow list like ${key}: ["glob"] — a bare, block-style, or null value parses as empty and silently drops the scope (GEN-001 [adr-glob-inline]).`,
+                file,
+              });
+            }
           }
         }
       },
