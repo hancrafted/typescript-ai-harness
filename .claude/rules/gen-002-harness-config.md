@@ -1,1 +1,0 @@
-../../.archgate/adrs/GEN-002-harness-config.md

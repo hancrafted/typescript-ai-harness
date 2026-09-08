@@ -36,12 +36,11 @@ Show the user the proposed `vX.Y.Z` and the full release notes, then **stop and 
 
 ## 4. Cut the release
 
-The release commit bumps `package.json` **and** `.typescript-ai-harness.json` together: GEN-002 §1.4 requires the local config's `version` — the value the CLI ships and stamps into a Target on install — to equal the harness release, and a vitest test asserts it, so a commit that bumps only `package.json` is rejected by pre-commit `archgate check`. `npm version` has no hook that restamps the config, so bump both by hand in one commit:
+`package.json` is the only version to bump. The former second stamp in `.typescript-ai-harness.json` is gone with the frontmatter ADRs that read it, so no config file has to move in step with the release:
 
 ```bash
 npm version patch --no-git-tag-version   # bump package.json only; prints the new vX.Y.Z, no commit, no tag
-# set "version" in .typescript-ai-harness.json to that same X.Y.Z
-# commit package.json + package-lock.json + .typescript-ai-harness.json with the `commit` skill
+# commit package.json + package-lock.json with the `commit` skill
 git tag -a vX.Y.Z -m "vX.Y.Z"            # annotated — a bare `git tag vX.Y.Z` never leaves the machine
 git push --follow-tags                   # pushes commit AND tag -> triggers Publish
 git ls-remote --tags origin | grep vX.Y.Z   # prove the tag landed; no tag, no publish

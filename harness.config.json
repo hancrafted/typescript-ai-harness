@@ -1,5 +1,5 @@
 {
-  "ADR_CORE": ["GEN-001"],
+  "ADR_CORE": ["GEN-001", "GEN-002"],
   "supportingFiles": ["rules.d.ts"],
   "ARCHGATE_VERSION": "^0.55.0"
 }

@@ -253,11 +253,12 @@ describe.each([
       expect(has(`.archgate/adrs/${id}.rules.test.ts`)).toBe(true);
     }
     expect(has('.archgate/rules.d.ts')).toBe(true); // @generated types, seeded so the Target type-checks its own ADRs
-    // The shrink's negative control. GEN-002/GEN-003 and the four supporting
-    // files they needed still govern THIS repo, so they stay under .archgate/
-    // here — but they must not reach a Target. Every assertion above passes just
-    // as well if a stale copyAsset quietly puts one back, which is why the
-    // absences are asserted rather than left implied.
+    // The withdrawal's negative control. GEN-002-harness-config and
+    // GEN-003-frontmatter are deleted, and so are the four supporting files they
+    // needed — but a stale copyAsset or a resurrected asset would put one back
+    // without failing any assertion above, and GEN-002-harness-config in
+    // particular would collide with GEN-002-adr-symlink-claude-rules on its id
+    // and kill archgate outright. So the absences are asserted, not implied.
     for (const id of ['GEN-002-harness-config', 'GEN-003-frontmatter']) {
       expect(has(`.archgate/adrs/${id}.md`)).toBe(false);
       expect(has(`.claude/rules/${id.toLowerCase()}.md`)).toBe(false);

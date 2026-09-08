@@ -9,13 +9,13 @@ there is no npm token to manage. Canonical decision record: **ADR-0009**.
 ## TL;DR
 
 > **Superseded — do not run this.** `SKILL.md` step 4 is the current flow. `npm version` bumps
-> `package.json` alone, and a commit that leaves `.typescript-ai-harness.json` behind is rejected by
-> pre-commit `archgate check` (GEN-002 §1.4). The two files must move together, by hand, in one
-> commit; only the pipeline description below still applies.
+> `package.json`, which is now the only version to move — the second stamp in
+> `.typescript-ai-harness.json` is gone with the frontmatter ADRs that read it. Only the pipeline
+> description below still applies.
 
 ```bash
 git checkout main && git pull            # be on an up-to-date main
-# then follow SKILL.md step 4: bump both files, commit, annotated tag, push
+# then follow SKILL.md step 4: bump package.json, commit, annotated tag, push
 ```
 
 Then watch the **Publish** workflow in the Actions tab go green.
@@ -68,19 +68,20 @@ Before cutting a release, from an up-to-date `main`:
 
 ## Cut the release
 
-> **Superseded by `SKILL.md` step 4**, which bumps `package.json` and
-> `.typescript-ai-harness.json` in one hand-made commit and tags with `git tag -a`. `--follow-tags`
-> pushes annotated tags only, so a lightweight tag is silently dropped and nothing publishes.
+> **Superseded by `SKILL.md` step 4**, which bumps `package.json` in one commit and tags with
+> `git tag -a`. `--follow-tags` pushes annotated tags only, so a lightweight tag is silently
+> dropped and nothing publishes.
 
 ```bash
-# see SKILL.md step 4 — bump both files, commit via the `commit` skill,
+# see SKILL.md step 4 — bump package.json, commit via the `commit` skill,
 # `git tag -a vX.Y.Z -m "vX.Y.Z"`, then `git push --follow-tags`
 ```
 
 Notes:
 
-- `npm version` bumps `package.json`, which is the source of `HARNESS_VERSION` — the value
-  stamped into the seeded `.typescript-ai-harness.json` on install.
+- `npm version` bumps `package.json`, which is the source of `HARNESS_VERSION`. That export has
+  no production consumer since the config seed was withdrawn; whatever stamps a Target next needs
+  exactly this value.
 - `prepack` runs `npm run capture`, so the published tarball always carries a fresh
   `assets/core-bundle/` (the shipped Core governance bundle).
 
@@ -123,12 +124,9 @@ On the `v*` tag push:
 
 - **Deliberate, not automatic.** Merging to `main` never publishes; only a `v*` tag does.
 - **config-version ([#68](https://github.com/hancrafted/typescript-ai-harness/issues/68)).**
-  The seed is stamped with `HARNESS_VERSION`. `config-version` equality-checks the stamp only
-  where `package.json` names the harness itself, so a Target on a different `package.json`
-  version carries the stamp without a mismatch (cross-release comparison lands with the migrate
-  engine). This repo dogfoods clean (the harness *is* the package), so `npm version` still bumps
-  `package.json` and the dogfood `.typescript-ai-harness.json` version in lockstep — restamp the
-  config in the release commit, or the pre-commit `archgate check` rejects it.
+  Withdrawn. The `config-version` rule lived in `GEN-002-harness-config`, which is deleted along
+  with the seed it checked, so no config stamp has to move with a release. The migrate engine
+  (#68) inherits the cross-release comparison problem if a stamped config ever returns.
 - **No token.** Trusted publishing means there is nothing to rotate — do not add an
   `NPM_TOKEN` secret.
 

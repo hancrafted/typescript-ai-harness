@@ -1,0 +1,1 @@
+../../.archgate/adrs/GEN-002-adr-symlink-claude-rules.md

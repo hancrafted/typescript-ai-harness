@@ -64,14 +64,16 @@ describe('parseHarnessConfig — rejects malformed input', () => {
 
 describe('harness.config.json — the baked build config', () => {
   it('names the core ADR membership, ordered and explicit', () => {
-    expect(ADR_CORE).toEqual(['GEN-001']);
+    // GEN-002 is the .claude/rules symlink contract. It ships because the CLI
+    // writes those symlinks into every Target (ADR-0010 §3, §5), so a Target
+    // that dropped one would otherwise pass its own archgate check.
+    expect(ADR_CORE).toEqual(['GEN-001', 'GEN-002']);
   });
 
   it('lists exactly the .archgate/-relative supporting files that exist today', () => {
     // Only the @generated rules.d.ts, which GEN-001 needs to type-check a
-    // Target's own ADR .rules.ts. The four the frontmatter ADRs needed are not
-    // shipped: they still govern this repo, so they live under .archgate/ and
-    // stay out of the bundle.
+    // Target's own ADR .rules.ts. The four the frontmatter ADRs needed are gone
+    // with those ADRs (ADR-0010 v4).
     expect(supportingFiles).toEqual(['rules.d.ts']);
   });
 
